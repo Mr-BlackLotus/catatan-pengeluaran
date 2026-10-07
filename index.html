@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0f766e">
+<title>Catatan Pengeluaran</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top">
+  <div class="top-in">
+    <div class="brand">
+      <span class="logo" aria-hidden="true">Rp</span>
+      <div>
+        <h1>Catatan Pengeluaran</h1>
+        <p id="status" class="status status-local">Mode lokal</p>
+      </div>
+    </div>
+    <div class="top-actions">
+      <button id="btn-sync" class="icon-btn" title="Muat ulang dari Drive" aria-label="Muat ulang">⟳</button>
+      <button id="btn-settings" class="icon-btn" title="Pengaturan" aria-label="Pengaturan">⚙</button>
+    </div>
+  </div>
+</header>
+
+<main>
+  <div id="banner" class="banner" hidden>
+    Aplikasi belum terhubung ke Google Sheets. Data sementara hanya tersimpan di browser ini.
+    <button id="banner-setup" class="link-btn">Hubungkan ke Drive</button>
+  </div>
+
+  <!-- CATAT -->
+  <section class="card" id="catat">
+    <h2>Catat pengeluaran</h2>
+    <div id="chat-log" class="chat-log" aria-live="polite">
+      <div class="msg bot">Ketik pengeluaran seperti ngobrol, misalnya:<br><code>makan siang 25rb</code> · <code>bensin 50.000 kemarin</code> · <code>netflix 54000 tgl 3</code><br>Beberapa sekaligus? Pisahkan dengan baris baru atau titik koma. Atau kirim foto struk.</div>
+    </div>
+    <form id="chat-form" class="chat-form" autocomplete="off">
+      <label class="photo-btn" title="Foto / unggah struk">
+        <input type="file" id="photo" accept="image/*" hidden>
+        <span aria-hidden="true">📷</span><span class="sr">Foto struk</span>
+      </label>
+      <textarea id="chat-input" rows="1" placeholder="contoh: kopi 18rb, parkir 5000" enterkeyhint="send"></textarea>
+      <button type="submit" class="primary" id="send-btn">Kirim</button>
+    </form>
+    <label class="check"><input type="checkbox" id="autosave" checked> Simpan langsung ke Drive (tanpa konfirmasi) untuk pesan teks</label>
+    <div id="ocr-progress" class="progress" hidden><div></div><span></span></div>
+
+    <div id="drafts" class="drafts" hidden>
+      <h3>Periksa dulu sebelum disimpan</h3>
+      <div id="draft-list"></div>
+      <div class="row-end">
+        <button id="draft-cancel" class="ghost">Batal</button>
+        <button id="draft-save" class="primary">Simpan semua</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- PERIODE -->
+  <section class="card" id="periode">
+    <div class="seg" role="tablist" aria-label="Periode">
+      <button data-mode="week">Minggu</button>
+      <button data-mode="month" class="on">Bulan</button>
+      <button data-mode="year">Tahun</button>
+      <button data-mode="all">Semua</button>
+    </div>
+    <div class="nav">
+      <button id="prev" class="icon-btn" aria-label="Sebelumnya">‹</button>
+      <div class="nav-mid">
+        <strong id="period-label"></strong>
+        <button id="today" class="link-btn">Kembali ke sekarang</button>
+      </div>
+      <button id="next" class="icon-btn" aria-label="Berikutnya">›</button>
+    </div>
+    <div class="kpis">
+      <div class="kpi"><span>Total</span><strong id="k-total">–</strong><small id="k-delta"></small></div>
+      <div class="kpi"><span>Rata-rata / hari</span><strong id="k-avg">–</strong><small id="k-days"></small></div>
+      <div class="kpi"><span>Transaksi</span><strong id="k-count">–</strong><small id="k-max"></small></div>
+      <div class="kpi"><span>Kategori terbesar</span><strong id="k-top">–</strong><small id="k-topval"></small></div>
+    </div>
+  </section>
+
+  <!-- GRAFIK -->
+  <section class="grid2">
+    <div class="card">
+      <h2>Tren pengeluaran</h2>
+      <div class="chart-box"><canvas id="chart-bar" role="img" aria-label="Grafik batang pengeluaran per periode"></canvas></div>
+    </div>
+    <div class="card">
+      <h2>Per kategori</h2>
+      <div class="chart-box small"><canvas id="chart-pie" role="img" aria-label="Grafik donat pengeluaran per kategori"></canvas></div>
+      <ul id="cat-list" class="cat-list"></ul>
+    </div>
+  </section>
+
+  <!-- PERHATIAN -->
+  <section class="card" id="alerts-card">
+    <div class="row-between">
+      <h2>Perlu diperhatikan</h2>
+      <span class="muted" id="threshold-note"></span>
+    </div>
+    <ul id="alerts" class="alerts"></ul>
+  </section>
+
+  <!-- RIWAYAT -->
+  <section class="card">
+    <div class="row-between wrap">
+      <h2>Riwayat</h2>
+      <div class="filters">
+        <input type="search" id="q" placeholder="Cari…" aria-label="Cari">
+        <select id="f-cat" aria-label="Filter kategori"><option value="">Semua kategori</option></select>
+      </div>
+    </div>
+    <div id="table-empty" class="empty" hidden>Belum ada catatan di periode ini.</div>
+    <ul id="list" class="tx-list"></ul>
+    <button id="more" class="ghost wide" hidden>Tampilkan lebih banyak</button>
+  </section>
+</main>
+
+<div id="toast" class="toast" role="status" hidden></div>
+
+<!-- DIALOG: pengaturan -->
+<dialog id="dlg-settings">
+  <form method="dialog" class="dlg" id="settings-form">
+    <h2>Pengaturan</h2>
+    <label>URL Web App Google Apps Script
+      <input id="cfg-url" type="url" inputmode="url" placeholder="https://script.google.com/macros/s/…/exec">
+    </label>
+    <label>Kode rahasia (TOKEN)
+      <input id="cfg-token" type="password" autocomplete="off" placeholder="sama dengan TOKEN di Code.gs">
+    </label>
+    <label>Batas "pengeluaran besar" (Rp)
+      <input id="cfg-limit" type="number" min="0" step="1000" placeholder="Kosongkan = otomatis dari riwayat">
+    </label>
+    <p id="cfg-msg" class="muted"></p>
+    <div class="row-end">
+      <button type="button" id="cfg-test" class="ghost">Tes koneksi</button>
+      <button type="button" id="cfg-close" class="ghost">Tutup</button>
+      <button type="submit" value="save" class="primary">Simpan</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- DIALOG: edit -->
+<dialog id="dlg-edit">
+  <form method="dialog" class="dlg" id="edit-form">
+    <h2>Ubah catatan</h2>
+    <label>Tanggal <input id="e-date" type="date" required></label>
+    <label>Deskripsi <input id="e-desc" type="text" required></label>
+    <label>Jumlah (Rp) <input id="e-amount" type="number" min="1" step="1" required inputmode="numeric"></label>
+    <label>Kategori <select id="e-cat"></select></label>
+    <label>Metode
+      <select id="e-method"><option value="">–</option><option>Tunai</option><option>Transfer</option><option>E-wallet</option><option>Kartu</option></select>
+    </label>
+    <div class="row-end">
+      <button type="button" id="e-delete" class="danger">Hapus</button>
+      <button type="button" id="e-close" class="ghost">Batal</button>
+      <button type="submit" class="primary">Simpan</button>
+    </div>
+  </form>
+</dialog>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="lib.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

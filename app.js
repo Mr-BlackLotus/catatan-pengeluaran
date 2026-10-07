@@ -12,8 +12,9 @@
     (children || []).forEach((c) => n.appendChild(typeof c === 'string' ? document.createTextNode(c) : c));
     return n;
   };
-  const catColor = (name) => (L.CATEGORIES.find((c) => c.name === name) || L.CATEGORIES[L.CATEGORIES.length - 1]).color;
   const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+  const norm = (d) => Object.assign({}, d, { type: d.type === 'income' ? 'income' : 'expense' });
+  const sign = (type) => (type === 'income' ? '+ ' : '− ');
 
   // ---------- state ----------
   const store = {
@@ -24,10 +25,12 @@
   let data = [];
   let mode = 'month';
   let anchor = new Date();
+  let tab = store.get('et_tab', 'summary');
+  if (['summary', 'expense', 'income'].indexOf(tab) < 0) tab = 'summary';
+  let entryType = tab === 'income' ? 'income' : 'expense';
   let drafts = [];
   let visible = 50;
-  let barChart = null;
-  let pieChart = null;
+  const charts = { bar: null, pie: null, sum: null };
 
   const connected = () => Boolean(cfg.url && cfg.token);
 
@@ -53,6 +56,15 @@
     return m;
   }
 
+  // ---------- tema ----------
+  function applyTheme(t) {
+    document.documentElement.setAttribute('data-theme', t);
+    $('#theme-icon').textContent = t === 'dark' ? '☀' : '☾';
+    $('#btn-theme').title = t === 'dark' ? 'Ganti ke mode terang' : 'Ganti ke mode gelap';
+    const meta = $('#meta-theme');
+    if (meta) meta.setAttribute('content', t === 'dark' ? '#090d18' : '#4f46e5');
+  }
+
   // ---------- data layer ----------
   async function api(action, payload) {
     const res = await fetch(cfg.url, {
@@ -69,19 +81,19 @@
 
   async function load() {
     if (!connected()) {
-      data = store.get('et_local', []);
+      data = store.get('et_local', []).map(norm);
       setStatus('local', 'Mode lokal (belum terhubung ke Drive)');
       $('#banner').hidden = false;
       render();
       return;
     }
     $('#banner').hidden = true;
-    data = store.get('et_cache', []);
+    data = store.get('et_cache', []).map(norm);
     render();
     setStatus('local', 'Menyinkronkan…');
     try {
       const j = await api('list');
-      data = j.items;
+      data = j.items.map(norm);
       persistLocal();
       setStatus('ok', 'Terhubung ke Google Sheets · ' + data.length + ' catatan');
     } catch (e) {
@@ -91,7 +103,7 @@
   }
 
   async function saveItems(items) {
-    const withId = items.map((i) => Object.assign({ id: uid() }, i));
+    const withId = items.map((i) => norm(Object.assign({ id: uid() }, i)));
     const forServer = withId.map((i) => Object.assign({}, i));
     withId.forEach((i) => { delete i.receipt; });
     data = data.concat(withId);
@@ -126,7 +138,7 @@
 
   async function updateItem(item) {
     const backup = data.slice();
-    data = data.map((d) => (d.id === item.id ? Object.assign({}, d, item) : d));
+    data = data.map((d) => (d.id === item.id ? norm(Object.assign({}, d, item)) : d));
     persistLocal();
     render();
     if (connected()) {
@@ -134,16 +146,64 @@
     }
   }
 
+  // ---------- jenis catatan & tab ----------
+  function setHint() {
+    const h = $('#hint-msg');
+    h.textContent = '';
+    const code = (t) => el('code', { text: t });
+    if (entryType === 'income') {
+      [document.createTextNode('Ketik pemasukan seperti ngobrol, misalnya:'), el('br'), code('gaji 8jt'), ' · ', code('freelance 1,5jt kemarin'), ' · ', code('dividen 250rb tgl 3'), el('br'), document.createTextNode('Beberapa sekaligus? Pisahkan dengan baris baru atau titik koma.')]
+        .forEach((n) => h.appendChild(typeof n === 'string' ? document.createTextNode(n) : n));
+    } else {
+      [document.createTextNode('Ketik pengeluaran seperti ngobrol, misalnya:'), el('br'), code('makan siang 25rb'), ' · ', code('bensin 50.000 kemarin'), ' · ', code('beli saham 500rb'), el('br'), document.createTextNode('Beberapa sekaligus? Pisahkan dengan baris baru atau titik koma. Atau kirim foto struk. Pemasukan? Ganti ke "+ Masuk" atau awali dengan "gaji", "bonus", dll.')]
+        .forEach((n) => h.appendChild(typeof n === 'string' ? document.createTextNode(n) : n));
+    }
+  }
+  function updateEntryUI() {
+    document.querySelectorAll('.type-toggle button').forEach((b) => b.classList.toggle('on', b.dataset.type === entryType));
+    $('#catat-title').textContent = entryType === 'income' ? 'Catat pemasukan' : 'Catat pengeluaran';
+    $('#chat-input').placeholder = entryType === 'income' ? 'contoh: gaji 8jt, freelance 1,5jt' : 'contoh: kopi 18rb, parkir 5000';
+    $('#photo-label').hidden = entryType === 'income';
+    setHint();
+  }
+  function fillCategoryFilter(type) {
+    const sel = $('#f-cat');
+    sel.textContent = '';
+    sel.appendChild(el('option', { value: '', text: 'Semua kategori' }));
+    L.catsFor(type).forEach((c) => sel.appendChild(el('option', { value: c.name, text: c.name })));
+  }
+  function setTab(t) {
+    tab = t;
+    store.set('et_tab', t);
+    document.body.className = 'tab-' + t;
+    document.querySelectorAll('.tabs button').forEach((b) => {
+      const on = b.dataset.tab === t;
+      b.classList.toggle('on', on);
+      b.setAttribute('aria-selected', String(on));
+    });
+    if (t !== 'summary') { entryType = t; updateEntryUI(); fillCategoryFilter(t); $('#q').value = ''; }
+    visible = 50;
+    render();
+  }
+
   // ---------- chat input ----------
   function summaryNode(items) {
     const ul = el('ul');
-    items.forEach((i) => ul.appendChild(el('li', { text: i.desc + ' — ' + L.rupiah(i.amount) + ' · ' + i.category + ' · ' + i.date })));
+    items.forEach((i) => ul.appendChild(el('li', { text: sign(i.type) + i.desc + ' — ' + L.rupiah(i.amount) + ' · ' + i.category + ' · ' + i.date + (i.method ? ' · ' + i.method : '') })));
     return ul;
+  }
+  function countText(items) {
+    const e = items.filter((i) => i.type === 'expense').length;
+    const n = items.filter((i) => i.type === 'income').length;
+    const parts = [];
+    if (e) parts.push(e + ' pengeluaran');
+    if (n) parts.push(n + ' pemasukan');
+    return parts.join(' dan ');
   }
 
   async function handleText(text) {
     addMsg('user', text);
-    const parsed = L.parseMessage(text);
+    const parsed = L.parseMessage(text, undefined, entryType === 'income' ? 'income' : undefined);
     const ok = parsed.filter((p) => p.entry && p.entry.amount > 0).map((p) => p.entry);
     const bad = parsed.filter((p) => !p.entry || !(p.entry.amount > 0)).map((p) => p.raw);
 
@@ -151,12 +211,13 @@
       addMsg('bot err', 'Nominal tidak ditemukan pada: ' + bad.map((b) => '"' + b + '"').join(', ') + '. Tulis angkanya, mis. 25rb atau 25.000.');
     }
     if (!ok.length) return;
+    const switched = entryType === 'expense' && ok.some((o) => o.type === 'income');
 
     if ($('#autosave').checked) {
       try {
         const saved = await saveItems(ok);
         const undo = el('button', { class: 'link-btn undo', type: 'button', text: 'Batalkan' });
-        const msg = addMsg('bot', [el('span', { text: 'Dicatat ' + saved.length + ' pengeluaran:' }), undo, summaryNode(saved)]);
+        const msg = addMsg('bot', [el('span', { text: 'Dicatat ' + countText(saved) + (switched ? ' (terdeteksi pemasukan)' : '') + ':' }), undo, summaryNode(saved)]);
         undo.addEventListener('click', async () => {
           undo.disabled = true;
           try { await deleteItems(saved.map((s) => s.id)); undo.remove(); msg.firstChild.textContent = 'Dibatalkan.'; } catch (e) { undo.disabled = false; toast('Gagal membatalkan: ' + e.message); }
@@ -182,7 +243,9 @@
     box.hidden = drafts.length === 0;
     drafts.forEach((d) => {
       const wrap = el('div', { class: 'draft' + (d.amount > 0 ? '' : ' bad') });
-      const mk = (label, input, full) => { const l = el('label', { class: full ? 'full' : '' }, [label, input]); return l; };
+      const mk = (label, input, full) => el('label', { class: full ? 'full' : '' }, [label, input]);
+      const type = el('select');
+      [['expense', 'Pengeluaran'], ['income', 'Pemasukan']].forEach((p) => { const o = el('option', { value: p[0], text: p[1] }); if (p[0] === d.type) o.selected = true; type.appendChild(o); });
       const date = el('input', { type: 'date', value: d.date });
       date.addEventListener('change', () => (d.date = date.value));
       const amt = el('input', { type: 'number', min: '1', inputmode: 'numeric', value: d.amount || '' });
@@ -190,14 +253,16 @@
       const desc = el('input', { type: 'text', value: d.desc });
       desc.addEventListener('input', () => (d.desc = desc.value));
       const cat = el('select');
-      L.CATEGORIES.forEach((c) => { const o = el('option', { value: c.name, text: c.name }); if (c.name === d.category) o.selected = true; cat.appendChild(o); });
+      L.catsFor(d.type).forEach((c) => { const o = el('option', { value: c.name, text: c.name }); if (c.name === d.category) o.selected = true; cat.appendChild(o); });
       cat.addEventListener('change', () => (d.category = cat.value));
+      type.addEventListener('change', () => { d.type = type.value; d.category = L.categorize(d.desc, d.type); renderDrafts(); });
       const rm = el('button', { type: 'button', class: 'ghost rm', text: 'Hapus' });
       rm.addEventListener('click', () => { drafts = drafts.filter((x) => x.tid !== d.tid); renderDrafts(); });
       wrap.appendChild(mk('Deskripsi', desc, true));
       wrap.appendChild(mk('Jumlah (Rp)', amt));
       wrap.appendChild(mk('Tanggal', date));
-      wrap.appendChild(mk('Kategori', cat, true));
+      wrap.appendChild(mk('Jenis', type));
+      wrap.appendChild(mk('Kategori', cat));
       wrap.appendChild(rm);
       list.appendChild(wrap);
     });
@@ -208,11 +273,11 @@
     const btn = $('#draft-save');
     btn.disabled = true;
     try {
-      const items = valid.map((d) => ({ date: d.date, desc: d.desc.trim(), amount: d.amount, category: d.category, method: d.method || '', source: d.source || 'chat', receipt: d.receipt }));
+      const items = valid.map((d) => ({ type: d.type, date: d.date, desc: d.desc.trim(), amount: d.amount, category: d.category, method: d.method || '', source: d.source || 'chat', receipt: d.receipt }));
       const saved = await saveItems(items);
       drafts = drafts.filter((d) => !valid.includes(d));
       renderDrafts();
-      addMsg('bot', [el('span', { text: 'Tersimpan ' + saved.length + ' catatan.' }), summaryNode(saved)]);
+      addMsg('bot', [el('span', { text: 'Tersimpan ' + countText(saved) + ':' }), summaryNode(saved)]);
     } catch (e) {
       toast('Gagal menyimpan: ' + e.message);
     } finally {
@@ -276,163 +341,258 @@
 
   // ---------- render ----------
   function currentRange() { return L.periodRange(mode, anchor, data); }
+  function elapsedDays(range) {
+    const days = Math.max(1, Math.round((range.end - range.start) / 864e5) + 1);
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    if (mode === 'all') return days;
+    if (today >= range.start && today <= range.end) return Math.max(1, Math.round((today - range.start) / 864e5) + 1);
+    return days;
+  }
+  function setDelta(node, cur, prev, upIsGood) {
+    node.className = '';
+    if (prev === null || prev === undefined) { node.textContent = ''; return; }
+    if (prev === 0) { node.textContent = cur > 0 ? 'Periode lalu kosong' : ''; return; }
+    const pct = ((cur - prev) / prev) * 100;
+    if (Math.abs(pct) < 0.5) { node.textContent = 'Sama seperti periode lalu'; return; }
+    node.textContent = (pct > 0 ? '▲ ' : '▼ ') + Math.abs(pct).toFixed(0) + '% vs periode lalu';
+    node.className = (pct > 0) === upIsGood ? 'pos' : 'neg';
+  }
 
   function render() {
     const range = currentRange();
-    const items = L.inRange(data, range);
-    const total = L.sum(items);
-    const days = Math.max(1, Math.round((range.end - range.start) / 864e5) + 1);
-    const prevRange = L.previousRange(mode, range);
-    const prevTotal = prevRange ? L.sum(L.inRange(data, prevRange)) : null;
-    const cats = L.byCategory(items);
-    const threshold = L.bigThreshold(data, Number(cfg.limit));
-
+    const inPeriod = L.inRange(data, range);
     $('#period-label').textContent = L.periodLabel(mode, range);
     document.querySelectorAll('.seg button').forEach((b) => b.classList.toggle('on', b.dataset.mode === mode));
     $('#prev').disabled = $('#next').disabled = mode === 'all';
     $('#today').hidden = mode === 'all';
+    $('#view-summary').hidden = tab !== 'summary';
+    $('#view-detail').hidden = tab === 'summary';
+    if (tab === 'summary') renderSummary(range, inPeriod);
+    else renderDetail(tab, range, inPeriod);
+  }
 
-    // KPI
+  function themeColors() {
+    const cs = getComputedStyle(document.documentElement);
+    const g = (n) => cs.getPropertyValue(n).trim();
+    return { ink: g('--ink'), muted: g('--muted'), line: g('--line'), brand: g('--brand'), card: g('--card'), out: g('--out'), in: g('--in') };
+  }
+  const tickMoney = (v) => (v >= 1e6 ? v / 1e6 + ' jt' : v >= 1e3 ? v / 1e3 + ' rb' : v);
+  function destroyChart(k) { if (charts[k]) { charts[k].destroy(); charts[k] = null; } }
+
+  // ----- Ringkasan -----
+  function renderSummary(range, inPeriod) {
+    const th = themeColors();
+    const exp = L.ofType(inPeriod, 'expense');
+    const inc = L.ofType(inPeriod, 'income');
+    const out = L.sum(exp), inn = L.sum(inc);
+    const net = inn - out;
+    const prevR = L.previousRange(mode, range);
+    const prevItems = prevR ? L.inRange(data, prevR) : null;
+    const prevOut = prevItems ? L.sum(L.ofType(prevItems, 'expense')) : null;
+    const prevIn = prevItems ? L.sum(L.ofType(prevItems, 'income')) : null;
+
+    $('#s-net').textContent = (net > 0 ? '+ ' : '') + L.rupiah(net);
+    $('#s-net-sub').textContent = !inPeriod.length ? 'Belum ada catatan' : net >= 0 ? 'Surplus: pemasukan lebih besar dari pengeluaran' : 'Defisit: pengeluaran lebih besar dari pemasukan';
+    $('#s-in').textContent = L.rupiah(inn);
+    $('#s-out').textContent = L.rupiah(out);
+    setDelta($('#s-in-d'), inn, prevIn, true);
+    setDelta($('#s-out-d'), out, prevOut, false);
+    $('#s-rate').textContent = inn > 0 ? Math.round((net / inn) * 100) + '%' : '–';
+    $('#s-rate-d').textContent = inn > 0 ? 'dari pemasukan yang tersisa' : 'butuh data pemasukan';
+
+    destroyChart('sum');
+    if (window.Chart) {
+      const r = mode === 'all' ? L.periodRange('all', anchor, data) : range;
+      const bi = L.buckets(inc, mode, r);
+      const bo = L.buckets(exp, mode, r);
+      charts.sum = new Chart($('#chart-sum'), {
+        type: 'bar',
+        data: {
+          labels: bi.map((b) => b.label),
+          datasets: [
+            { label: 'Pemasukan', data: bi.map((b) => b.total), backgroundColor: th.in, borderRadius: 4, maxBarThickness: 18 },
+            { label: 'Pengeluaran', data: bo.map((b) => b.total), backgroundColor: th.out, borderRadius: 4, maxBarThickness: 18 },
+          ],
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: { legend: { position: 'bottom', labels: { color: th.muted, boxWidth: 10, boxHeight: 10 } }, tooltip: { callbacks: { label: (c) => c.dataset.label + ': ' + L.rupiah(c.parsed.y) } } },
+          scales: {
+            x: { ticks: { color: th.muted, maxRotation: 0, autoSkip: true, maxTicksLimit: mode === 'month' ? 10 : 12 }, grid: { display: false } },
+            y: { beginAtZero: true, ticks: { color: th.muted, callback: tickMoney }, grid: { color: th.line } },
+          },
+        },
+      });
+    }
+
+    const ul = $('#alerts-sum');
+    ul.textContent = '';
+    const add = (cls, text) => ul.appendChild(el('li', { class: cls, text: text }));
+    if (!inPeriod.length) add('info', 'Belum ada data di periode ini.');
+    else {
+      if (inn === 0 && out > 0) add('warn', 'Belum ada pemasukan tercatat di periode ini. Catat di tab Pemasukan agar saldo akurat.');
+      else if (net < 0) add('bad', 'Pengeluaran melebihi pemasukan sebesar ' + L.rupiah(-net) + '.');
+      else if (inn > 0) {
+        const rate = net / inn;
+        if (rate >= 0.2) add('good', 'Surplus ' + L.rupiah(net) + ' — ' + Math.round(rate * 100) + '% dari pemasukan tersisa.');
+        else add('warn', 'Rasio tabung baru ' + Math.round(rate * 100) + '% (sisa ' + L.rupiah(net) + '). Targetkan minimal 20%.');
+      }
+      const threshold = L.bigThreshold(data, Number(cfg.limit));
+      const big = exp.filter((x) => x.amount >= threshold && x.category !== 'Investasi');
+      if (big.length) add('warn', big.length + ' pengeluaran besar (di atas ' + L.rupiah(threshold) + ') — lihat tab Pengeluaran.');
+      const invest = exp.filter((x) => x.category === 'Investasi');
+      if (invest.length && inn > 0) add('info', 'Investasi periode ini ' + L.rupiah(L.sum(invest)) + ' (' + Math.round((L.sum(invest) / inn) * 100) + '% dari pemasukan).');
+      if (prevOut !== null && prevOut > 0 && out > prevOut * 1.2) add('warn', 'Pengeluaran naik ' + Math.round(((out - prevOut) / prevOut) * 100) + '% dibanding periode sebelumnya.');
+    }
+
+    const rows = inPeriod.slice().sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : b.id.localeCompare(a.id))).slice(0, 10);
+    $('#sum-empty').hidden = rows.length > 0;
+    renderRows($('#list-sum'), rows, Infinity, true);
+  }
+
+  // ----- Pengeluaran / Pemasukan -----
+  function renderDetail(type, range, inPeriod) {
+    const th = themeColors();
+    const isOut = type === 'expense';
+    const items = L.ofType(inPeriod, type);
+    const total = L.sum(items);
+    const prevR = L.previousRange(mode, range);
+    const prevTotal = prevR ? L.sum(L.ofType(L.inRange(data, prevR), type)) : null;
+    const cats = L.byCategory(items);
+    const threshold = L.bigThreshold(data, Number(cfg.limit));
+
+    $('#d-title').textContent = isOut ? 'Total pengeluaran' : 'Total pemasukan';
+    $('#hist-title').textContent = isOut ? 'Riwayat pengeluaran' : 'Riwayat pemasukan';
+    $('#k-top-label').textContent = isOut ? 'Kategori terbesar' : 'Sumber terbesar';
     $('#k-total').textContent = L.rupiah(total);
-    const kd = $('#k-delta');
-    kd.className = '';
-    if (prevTotal !== null && prevTotal > 0) {
-      const pct = ((total - prevTotal) / prevTotal) * 100;
-      kd.textContent = (pct >= 0 ? '▲ ' : '▼ ') + Math.abs(pct).toFixed(0) + '% vs periode lalu';
-      kd.className = pct > 0 ? 'up' : 'down';
-    } else { kd.textContent = prevTotal === 0 ? 'Periode lalu kosong' : ''; }
-    const elapsed = (() => {
-      const today = new Date(); today.setHours(0, 0, 0, 0);
-      if (mode === 'all') return days;
-      if (today >= range.start && today <= range.end) return Math.max(1, Math.round((today - range.start) / 864e5) + 1);
-      return days;
-    })();
-    $('#k-avg').textContent = L.rupiah(total / elapsed);
-    $('#k-days').textContent = elapsed + ' hari';
+    setDelta($('#k-delta'), total, prevTotal, !isOut);
+    $('#k-avg').textContent = L.rupiah(total / elapsedDays(range));
+    $('#k-days').textContent = elapsedDays(range) + ' hari';
     $('#k-count').textContent = String(items.length);
     const biggest = items.reduce((m, x) => (x.amount > (m ? m.amount : 0) ? x : m), null);
     $('#k-max').textContent = biggest ? 'Terbesar ' + L.rupiah(biggest.amount) : '';
     $('#k-top').textContent = cats.length ? cats[0].category : '–';
     $('#k-topval').textContent = cats.length ? L.rupiah(cats[0].total) + ' (' + Math.round((cats[0].total / total) * 100) + '%)' : '';
 
-    renderCharts(items, range, cats, total);
-    renderAlerts(items, range, cats, total, prevRange, threshold);
-    renderList(items, threshold);
-  }
-
-  function chartTheme() {
-    const cs = getComputedStyle(document.documentElement);
-    return { ink: cs.getPropertyValue('--ink').trim(), muted: cs.getPropertyValue('--muted').trim(), line: cs.getPropertyValue('--line').trim(), brand: cs.getPropertyValue('--brand').trim(), card: cs.getPropertyValue('--card').trim() };
-  }
-
-  function renderCharts(items, range, cats, total) {
-    const th = chartTheme();
-    const bk = L.buckets(items, mode, mode === 'all' ? L.periodRange('all', anchor, data) : range);
-    if (barChart) barChart.destroy();
-    if (pieChart) pieChart.destroy();
-    if (!window.Chart) return;
-    barChart = new Chart($('#chart-bar'), {
-      type: 'bar',
-      data: { labels: bk.map((b) => b.label), datasets: [{ data: bk.map((b) => b.total), backgroundColor: th.brand, borderRadius: 4, maxBarThickness: 28 }] },
-      options: {
-        responsive: true, maintainAspectRatio: false,
-        plugins: { legend: { display: false }, tooltip: { callbacks: { label: (c) => L.rupiah(c.parsed.y) } } },
-        scales: {
-          x: { ticks: { color: th.muted, maxRotation: 0, autoSkip: true, maxTicksLimit: mode === 'month' ? 10 : 12 }, grid: { display: false } },
-          y: { beginAtZero: true, ticks: { color: th.muted, callback: (v) => (v >= 1e6 ? v / 1e6 + ' jt' : v >= 1e3 ? v / 1e3 + ' rb' : v) }, grid: { color: th.line } },
+    // grafik
+    destroyChart('bar'); destroyChart('pie');
+    const catList = $('#cat-list');
+    catList.textContent = '';
+    if (window.Chart) {
+      const bk = L.buckets(items, mode, mode === 'all' ? L.periodRange('all', anchor, data) : range);
+      charts.bar = new Chart($('#chart-bar'), {
+        type: 'bar',
+        data: { labels: bk.map((b) => b.label), datasets: [{ data: bk.map((b) => b.total), backgroundColor: isOut ? th.out : th.in, borderRadius: 5, maxBarThickness: 28 }] },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: { legend: { display: false }, tooltip: { callbacks: { label: (c) => L.rupiah(c.parsed.y) } } },
+          scales: {
+            x: { ticks: { color: th.muted, maxRotation: 0, autoSkip: true, maxTicksLimit: mode === 'month' ? 10 : 12 }, grid: { display: false } },
+            y: { beginAtZero: true, ticks: { color: th.muted, callback: tickMoney }, grid: { color: th.line } },
+          },
         },
-      },
-    });
-    pieChart = new Chart($('#chart-pie'), {
-      type: 'doughnut',
-      data: { labels: cats.map((c) => c.category), datasets: [{ data: cats.map((c) => c.total), backgroundColor: cats.map((c) => catColor(c.category)), borderColor: th.card, borderWidth: 2 }] },
-      options: { responsive: true, maintainAspectRatio: false, cutout: '62%', plugins: { legend: { display: false }, tooltip: { callbacks: { label: (c) => c.label + ': ' + L.rupiah(c.parsed) } } } },
-    });
-    const ul = $('#cat-list');
-    ul.textContent = '';
+      });
+      charts.pie = new Chart($('#chart-pie'), {
+        type: 'doughnut',
+        data: { labels: cats.map((c) => c.category), datasets: [{ data: cats.map((c) => c.total), backgroundColor: cats.map((c) => L.catColor(type, c.category)), borderColor: th.card, borderWidth: 2 }] },
+        options: { responsive: true, maintainAspectRatio: false, cutout: '62%', plugins: { legend: { display: false }, tooltip: { callbacks: { label: (c) => c.label + ': ' + L.rupiah(c.parsed) } } } },
+      });
+    }
     cats.forEach((c) => {
-      ul.appendChild(el('li', {}, [
-        el('span', { class: 'dot', style: 'background:' + catColor(c.category) }),
+      catList.appendChild(el('li', {}, [
+        el('span', { class: 'dot', style: 'background:' + L.catColor(type, c.category) }),
         el('span', { text: c.category }),
         el('span', { class: 'val', text: L.rupiah(c.total) }),
         el('span', { class: 'pct', text: Math.round((c.total / total) * 100) + '%' }),
       ]));
     });
+
+    renderDetailAlerts(type, items, cats, total, prevR, prevTotal, threshold);
+
+    // riwayat
+    const q = $('#q').value.trim().toLowerCase();
+    const fc = $('#f-cat').value;
+    let rows = items.filter((x) => (!fc || x.category === fc) && (!q || (x.desc + ' ' + x.category).toLowerCase().includes(q)));
+    rows = rows.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : b.id.localeCompare(a.id)));
+    $('#table-empty').hidden = rows.length > 0;
+    renderRows($('#list'), rows.slice(0, visible), isOut ? threshold : Infinity, false);
+    $('#more').hidden = rows.length <= visible;
   }
 
-  function renderAlerts(items, range, cats, total, prevRange, threshold) {
+  function renderDetailAlerts(type, items, cats, total, prevR, prevTotal, threshold) {
+    const isOut = type === 'expense';
     const ul = $('#alerts');
     ul.textContent = '';
-    $('#threshold-note').textContent = 'Batas besar: ' + L.rupiah(threshold) + (cfg.limit ? ' (manual)' : ' (otomatis)');
+    $('#threshold-note').textContent = isOut ? 'Batas besar: ' + L.rupiah(threshold) + (cfg.limit ? ' (manual)' : ' (otomatis)') : '';
     const add = (cls, node) => { const li = el('li', { class: cls }, [node]); ul.appendChild(li); return li; };
     if (!items.length) { add('info', 'Belum ada data di periode ini.'); return; }
 
-    const big = items.filter((x) => x.amount >= threshold).sort((a, b) => b.amount - a.amount);
-    if (big.length) {
-      const bigTotal = L.sum(big);
-      const li = add('bad', el('span', { text: big.length + ' pengeluaran besar (total ' + L.rupiah(bigTotal) + ', ' + Math.round((bigTotal / total) * 100) + '% dari periode ini):' }));
-      const ol = el('ol');
-      big.slice(0, 5).forEach((b) => ol.appendChild(el('li', { text: b.desc + ' — ' + L.rupiah(b.amount) + ' (' + b.category + ', ' + b.date + ')' })));
-      li.appendChild(ol);
-    } else {
-      add('good', 'Tidak ada pengeluaran di atas batas ' + L.rupiah(threshold) + '. 👍');
-    }
-    if (cats.length && cats[0].total / total > 0.4 && cats.length > 1) {
-      add('warn', 'Kategori "' + cats[0].category + '" menguasai ' + Math.round((cats[0].total / total) * 100) + '% pengeluaran periode ini.');
-    }
-    if (prevRange) {
-      const prevItems = L.inRange(data, prevRange);
-      const prevTotal = L.sum(prevItems);
-      if (prevTotal > 0) {
+    if (isOut) {
+      const big = items.filter((x) => x.amount >= threshold && x.category !== 'Investasi').sort((a, b) => b.amount - a.amount);
+      if (big.length) {
+        const bigTotal = L.sum(big);
+        const li = add('bad', el('span', { text: big.length + ' pengeluaran besar (total ' + L.rupiah(bigTotal) + ', ' + Math.round((bigTotal / total) * 100) + '% dari periode ini):' }));
+        const ol = el('ol');
+        big.slice(0, 5).forEach((b) => ol.appendChild(el('li', { text: b.desc + ' — ' + L.rupiah(b.amount) + ' (' + b.category + ', ' + b.date + ')' })));
+        li.appendChild(ol);
+      } else {
+        add('good', 'Tidak ada pengeluaran di atas batas ' + L.rupiah(threshold) + '. 👍');
+      }
+      if (cats.length > 1 && cats[0].category !== 'Investasi' && cats[0].total / total > 0.4) {
+        add('warn', 'Kategori "' + cats[0].category + '" menguasai ' + Math.round((cats[0].total / total) * 100) + '% pengeluaran periode ini.');
+      }
+      if (prevR && prevTotal > 0) {
         const pct = ((total - prevTotal) / prevTotal) * 100;
         if (pct > 20) add('warn', 'Total naik ' + pct.toFixed(0) + '% dibanding periode sebelumnya (' + L.rupiah(prevTotal) + ').');
-        const pm = {}; L.byCategory(prevItems).forEach((c) => (pm[c.category] = c.total));
+        const pm = {}; L.byCategory(L.ofType(L.inRange(data, prevR), 'expense')).forEach((c) => (pm[c.category] = c.total));
         cats.forEach((c) => {
           const p = pm[c.category] || 0;
           if (p > 0 && c.total > p * 1.5 && c.total - p >= 100000) add('warn', c.category + ' naik ' + Math.round(((c.total - p) / p) * 100) + '% (dari ' + L.rupiah(p) + ' ke ' + L.rupiah(c.total) + ').');
         });
       }
+    } else {
+      if (cats.length === 1) add('info', 'Semua pemasukan periode ini berasal dari satu sumber: ' + cats[0].category + '.');
+      else if (cats.length > 1 && cats[0].total / total > 0.7) add('warn', 'Pemasukan sangat bergantung pada "' + cats[0].category + '" (' + Math.round((cats[0].total / total) * 100) + '%).');
+      if (prevR && prevTotal > 0) {
+        const pct = ((total - prevTotal) / prevTotal) * 100;
+        if (pct < -20) add('warn', 'Pemasukan turun ' + Math.abs(pct).toFixed(0) + '% dibanding periode sebelumnya (' + L.rupiah(prevTotal) + ').');
+        else if (pct > 10) add('good', 'Pemasukan naik ' + pct.toFixed(0) + '% dibanding periode sebelumnya.');
+      }
+      if (!ul.children.length) add('good', 'Pemasukan stabil, tidak ada hal yang perlu diperhatikan.');
     }
   }
 
-  function renderList(items, threshold) {
-    const q = $('#q').value.trim().toLowerCase();
-    const fc = $('#f-cat').value;
-    let rows = items.filter((x) => (!fc || x.category === fc) && (!q || (x.desc + ' ' + x.category).toLowerCase().includes(q)));
-    rows = rows.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : b.id.localeCompare(a.id)));
-    const list = $('#list');
+  function renderRows(list, rows, threshold, showSign) {
     list.textContent = '';
-    $('#table-empty').hidden = rows.length > 0;
-    rows.slice(0, visible).forEach((x) => {
+    rows.forEach((x) => {
       const meta = el('div', { class: 'meta' }, [
         el('span', { text: x.date }),
-        el('span', { class: 'chip' }, [el('i', { style: 'background:' + catColor(x.category) }), x.category]),
+        el('span', { class: 'chip' }, [el('i', { style: 'background:' + L.catColor(x.type, x.category) }), x.category]),
       ]);
+      if (x.method) meta.appendChild(el('span', { text: x.method }));
       if (x.source === 'foto') meta.appendChild(el('span', { text: '📷' }));
-      if (x.receipt) { const a = el('a', { href: x.receipt, target: '_blank', rel: 'noopener', text: 'bukti' }); meta.appendChild(a); }
-      if (x.amount >= threshold) meta.appendChild(el('span', { class: 'badge', text: 'Besar' }));
+      if (x.receipt) meta.appendChild(el('a', { href: x.receipt, target: '_blank', rel: 'noopener', text: 'bukti' }));
+      if (x.type === 'expense' && x.category !== 'Investasi' && x.amount >= threshold) meta.appendChild(el('span', { class: 'badge', text: 'Besar' }));
       const edit = el('button', { type: 'button', text: 'Ubah' });
       edit.addEventListener('click', () => openEdit(x));
       list.appendChild(el('li', { class: 'tx' }, [
         el('div', {}, [el('div', { class: 'd', text: x.desc }), meta]),
-        el('div', {}, [el('div', { class: 'amt', text: L.rupiah(x.amount) }), edit]),
+        el('div', {}, [el('div', { class: 'amt ' + (x.type === 'income' ? 'in' : 'out'), text: (showSign ? sign(x.type) : '') + L.rupiah(x.amount) }), edit]),
       ]));
     });
-    $('#more').hidden = rows.length <= visible;
-  }
-
-  function fillCategoryFilter() {
-    const sel = $('#f-cat');
-    L.CATEGORIES.forEach((c) => sel.appendChild(el('option', { value: c.name, text: c.name })));
   }
 
   // ---------- edit dialog ----------
   let editing = null;
-  function openEdit(x) {
-    editing = x;
+  function fillEditCats(type, selected) {
     const cat = $('#e-cat');
     cat.textContent = '';
-    L.CATEGORIES.forEach((c) => { const o = el('option', { value: c.name, text: c.name }); if (c.name === x.category) o.selected = true; cat.appendChild(o); });
+    L.catsFor(type).forEach((c) => { const o = el('option', { value: c.name, text: c.name }); if (c.name === selected) o.selected = true; cat.appendChild(o); });
+  }
+  function openEdit(x) {
+    editing = x;
+    $('#e-type').value = x.type;
+    fillEditCats(x.type, x.category);
     $('#e-date').value = x.date;
     $('#e-desc').value = x.desc;
     $('#e-amount').value = x.amount;
@@ -444,7 +604,30 @@
   function autosize(t) { t.style.height = 'auto'; t.style.height = Math.min(120, t.scrollHeight) + 'px'; }
 
   function init() {
-    fillCategoryFilter();
+    applyTheme(document.documentElement.getAttribute('data-theme') || 'light');
+    document.body.className = 'tab-' + tab;
+    document.querySelectorAll('.tabs button').forEach((b) => {
+      const on = b.dataset.tab === tab;
+      b.classList.toggle('on', on);
+      b.setAttribute('aria-selected', String(on));
+      b.addEventListener('click', () => setTab(b.dataset.tab));
+    });
+    fillCategoryFilter(tab === 'income' ? 'income' : 'expense');
+    updateEntryUI();
+    document.querySelectorAll('.type-toggle button').forEach((b) => b.addEventListener('click', () => { entryType = b.dataset.type; updateEntryUI(); $('#chat-input').focus(); }));
+
+    $('#btn-theme').addEventListener('click', () => {
+      const next = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+      try { localStorage.setItem('et_theme', next); } catch (e) { /* diblokir */ }
+      applyTheme(next);
+      render();
+    });
+    if (window.matchMedia) {
+      window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
+        let saved = null; try { saved = localStorage.getItem('et_theme'); } catch (err) { /* diblokir */ }
+        if (!saved) { applyTheme(e.matches ? 'dark' : 'light'); render(); }
+      });
+    }
 
     const input = $('#chat-input');
     input.addEventListener('input', () => autosize(input));
@@ -493,11 +676,13 @@
       const msg = $('#cfg-msg');
       if (!url || !token) { msg.textContent = 'Isi URL dan TOKEN dulu.'; return; }
       msg.textContent = 'Menguji…';
+      const keep = cfg;
       try {
-        const keep = cfg; cfg = { url: url, token: token };
-        await api('ping'); cfg = keep;
+        cfg = { url: url, token: token };
+        await api('ping');
         msg.textContent = '✔ Terhubung. Klik Simpan.';
       } catch (e) { msg.textContent = '✖ ' + e.message + ' — pastikan akses Web App "Siapa saja" dan TOKEN sama.'; }
+      finally { cfg = keep; }
     });
     $('#settings-form').addEventListener('submit', (e) => {
       e.preventDefault();
@@ -505,9 +690,9 @@
       cfg = { url: $('#cfg-url').value.trim(), token: $('#cfg-token').value.trim(), limit: Number($('#cfg-limit').value) || 0 };
       store.set('et_cfg', cfg);
       $('#dlg-settings').close();
-      if (!wasConnected && connected() && data.length) {
+      if (!wasConnected && connected()) {
         // data lokal yang sudah ada dikirim ke Drive sekali
-        const local = store.get('et_local', []);
+        const local = store.get('et_local', []).map(norm);
         if (local.length && confirm('Kirim ' + local.length + ' catatan lokal ke Google Sheets?')) {
           api('add', { items: local }).then(() => { store.set('et_local', []); load(); toast('Catatan lokal terkirim'); }).catch((err) => toast('Gagal kirim: ' + err.message));
           return;
@@ -516,10 +701,11 @@
       load();
     });
 
+    $('#e-type').addEventListener('change', () => fillEditCats($('#e-type').value, L.categorize($('#e-desc').value, $('#e-type').value)));
     $('#e-close').addEventListener('click', () => $('#dlg-edit').close());
     $('#edit-form').addEventListener('submit', async (e) => {
       e.preventDefault();
-      const item = { id: editing.id, date: $('#e-date').value, desc: $('#e-desc').value.trim(), amount: Number($('#e-amount').value), category: $('#e-cat').value, method: $('#e-method').value, source: editing.source || 'chat' };
+      const item = { id: editing.id, type: $('#e-type').value, date: $('#e-date').value, desc: $('#e-desc').value.trim(), amount: Number($('#e-amount').value), category: $('#e-cat').value, method: $('#e-method').value, source: editing.source || 'chat' };
       $('#dlg-edit').close();
       try { await updateItem(item); toast('Perubahan disimpan'); } catch (err) { toast('Gagal mengubah: ' + err.message); }
     });
@@ -529,7 +715,6 @@
       try { await deleteItems([editing.id]); toast('Catatan dihapus'); } catch (err) { toast('Gagal menghapus: ' + err.message); }
     });
 
-    if (window.matchMedia) window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', render);
     load();
   }
 

@@ -1,13 +1,15 @@
 /**
- * Backend Pencatat Pengeluaran — Google Apps Script
- * Menyimpan & membaca data di Google Sheets milik Anda.
+ * Backend Catatan Keuangan — Google Apps Script
+ * Menyimpan & membaca pengeluaran dan pemasukan di Google Sheets milik Anda.
  *
  * LANGKAH PASANG (lihat README.md):
- * 1. Buka spreadsheet -> Ekstensi -> Apps Script, tempel seluruh file ini.
+ * 1. Buka editor Apps Script, tempel seluruh file ini (ganti isi lama).
  * 2. Ganti TOKEN di bawah dengan kode rahasia buatan Anda sendiri.
  * 3. Jalankan fungsi `setup` sekali (beri izin akses).
  * 4. Deploy -> Deployment baru -> Aplikasi web
  *    (Jalankan sebagai: Saya | Siapa yang punya akses: Siapa saja) -> salin URL /exec.
+ *    Jika hanya memperbarui kode: Deploy -> Kelola deployment -> ikon pensil -> Versi: Versi baru -> Deploy
+ *    (URL tidak berubah).
  */
 
 const SPREADSHEET_ID = '19u4pnYkWr3-W_SZEMvU2B5rLIuvA-4XFrQvwjqFtzyU';
@@ -16,7 +18,8 @@ const SUMMARY_SHEET = 'Ringkasan';
 const TOKEN = 'GANTI_DENGAN_KODE_RAHASIA_ANDA';
 
 const RECEIPT_FOLDER = 'Struk Pengeluaran';
-const HEADERS = ['ID', 'Tanggal', 'Kategori', 'Deskripsi', 'Jumlah (Rp)', 'Metode', 'Sumber', 'Dicatat Pada', 'Bukti Foto'];
+const HEADERS = ['ID', 'Tanggal', 'Kategori', 'Deskripsi', 'Jumlah (Rp)', 'Metode', 'Sumber', 'Dicatat Pada', 'Bukti Foto', 'Tipe'];
+const TIPE_COL = 10; // kolom J: "Pengeluaran" atau "Pemasukan"
 
 function setup() {
   const sh = getSheet_();
@@ -25,13 +28,16 @@ function setup() {
   return 'OK: sheet "' + sh.getName() + '" siap.';
 }
 
+function styleHeader_(range) {
+  range.setFontWeight('bold').setBackground('#1f2937').setFontColor('#ffffff');
+}
+
 function getSheet_() {
   const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
   let sh = ss.getSheetByName(SHEET_NAME);
   if (!sh) sh = ss.insertSheet(SHEET_NAME);
   if (sh.getLastRow() === 0) {
-    sh.getRange(1, 1, 1, HEADERS.length).setValues([HEADERS])
-      .setFontWeight('bold').setBackground('#1f2937').setFontColor('#ffffff');
+    styleHeader_(sh.getRange(1, 1, 1, HEADERS.length).setValues([HEADERS]));
     sh.setFrozenRows(1);
     sh.getRange('B:B').setNumberFormat('yyyy-mm-dd');
     sh.getRange('E:E').setNumberFormat('#,##0');
@@ -43,8 +49,22 @@ function getSheet_() {
     sh.setColumnWidths(5, 1, 120);
     sh.setColumnWidths(6, 2, 100);
     sh.setColumnWidths(8, 1, 160);
+    sh.setColumnWidths(10, 1, 100);
   }
+  ensureTipe_(sh);
   return sh;
+}
+
+// Migrasi: sheet lama (tanpa kolom Tipe) otomatis ditambah kolom Tipe, data lama dianggap Pengeluaran.
+function ensureTipe_(sh) {
+  if (sh.getRange(1, TIPE_COL).getValue() === 'Tipe') return;
+  styleHeader_(sh.getRange(1, TIPE_COL).setValue('Tipe'));
+  const last = sh.getLastRow();
+  if (last >= 2) {
+    const ids = sh.getRange(2, 1, last - 1, 1).getValues();
+    const tipe = ids.map(function (r) { return [r[0] === '' ? '' : 'Pengeluaran']; });
+    sh.getRange(2, TIPE_COL, last - 1, 1).setValues(tipe);
+  }
 }
 
 function buildSummary_() {
@@ -52,17 +72,25 @@ function buildSummary_() {
   let sh = ss.getSheetByName(SUMMARY_SHEET);
   if (!sh) sh = ss.insertSheet(SUMMARY_SHEET);
   sh.clear();
-  sh.getRange('A1').setValue('Total per Kategori').setFontWeight('bold');
+  const src = SHEET_NAME + '!A:J'; // huruf kolom di QUERY mengikuti range: A=ID, B=Tanggal, C=Kategori, E=Jumlah, J=Tipe
+
+  sh.getRange('A1').setValue('Pengeluaran per Kategori').setFontWeight('bold');
   sh.getRange('A2').setFormula(
-    '=IFERROR(QUERY(' + SHEET_NAME + '!B:E,"select C, sum(E) where E is not null group by C order by sum(E) desc label C \'Kategori\', sum(E) \'Total (Rp)\'",1),"Belum ada data")'
+    `=IFERROR(QUERY(${src},"select C, sum(E) where E is not null and J = 'Pengeluaran' group by C order by sum(E) desc label C 'Kategori', sum(E) 'Total (Rp)'",1),"Belum ada data")`
   );
-  sh.getRange('D1').setValue('Total per Bulan').setFontWeight('bold');
+  sh.getRange('D1').setValue('Pemasukan per Kategori').setFontWeight('bold');
   sh.getRange('D2').setFormula(
-    '=IFERROR(QUERY(' + SHEET_NAME + '!B:E,"select year(B), month(B)+1, sum(E) where E is not null group by year(B), month(B)+1 order by year(B), month(B)+1 label year(B) \'Tahun\', month(B)+1 \'Bulan\', sum(E) \'Total (Rp)\'",1),"Belum ada data")'
+    `=IFERROR(QUERY(${src},"select C, sum(E) where E is not null and J = 'Pemasukan' group by C order by sum(E) desc label C 'Kategori', sum(E) 'Total (Rp)'",1),"Belum ada data")`
   );
-  sh.getRange('A:A').setColumnWidth(180);
+  sh.getRange('G1').setValue('Total per Bulan').setFontWeight('bold');
+  sh.getRange('G2').setFormula(
+    `=IFERROR(QUERY(${src},"select year(B), month(B)+1, J, sum(E) where E is not null and J is not null group by year(B), month(B)+1, J order by year(B), month(B)+1, J label year(B) 'Tahun', month(B)+1 'Bulan', J 'Tipe', sum(E) 'Total (Rp)'",1),"Belum ada data")`
+  );
+  sh.setColumnWidths(1, 1, 170);
+  sh.setColumnWidths(4, 1, 170);
   sh.getRange('B:B').setNumberFormat('#,##0');
-  sh.getRange('F:F').setNumberFormat('#,##0');
+  sh.getRange('E:E').setNumberFormat('#,##0');
+  sh.getRange('J:J').setNumberFormat('#,##0');
 }
 
 function json_(obj) {
@@ -70,7 +98,7 @@ function json_(obj) {
 }
 
 function doGet(e) {
-  return json_({ ok: true, message: 'Pencatat Pengeluaran aktif. Gunakan aplikasi web untuk mengakses data.' });
+  return json_({ ok: true, message: 'Catatan Keuangan aktif. Gunakan aplikasi web untuk mengakses data.' });
 }
 
 function doPost(e) {
@@ -128,6 +156,7 @@ function list_(sh) {
         method: String(r[5] || ''),
         source: String(r[6] || ''),
         receipt: String(r[8] || ''),
+        type: r[9] === 'Pemasukan' ? 'income' : 'expense',
       };
     });
 }
@@ -155,6 +184,7 @@ function rowFor_(it, receiptUrl) {
     String(it.source || 'chat'),
     new Date(),
     receiptUrl || '',
+    it.type === 'income' ? 'Pemasukan' : 'Pengeluaran',
   ];
 }
 

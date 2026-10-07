@@ -5,18 +5,36 @@
 })(typeof self !== 'undefined' ? self : this, function () {
   'use strict';
 
-  const CATEGORIES = [
-    { name: 'Makan & Minum', color: '#e8743b', words: ['makan', 'minum', 'kopi', 'sarapan', 'lunch', 'dinner', 'nasi', 'ayam', 'bakso', 'mie', 'soto', 'warteg', 'resto', 'restoran', 'cafe', 'kafe', 'gofood', 'grabfood', 'shopeefood', 'boba', 'jajan', 'snack', 'camilan', 'roti', 'es teh', 'teh', 'jus', 'martabak', 'sate', 'pizza', 'burger', 'kfc', 'mcd', 'starbucks', 'warung', 'kantin', 'catering', 'seblak', 'gorengan'] },
-    { name: 'Transportasi', color: '#3b82c4', words: ['bensin', 'pertalite', 'pertamax', 'solar', 'parkir', 'tol', 'ojek', 'gojek', 'grab', 'gocar', 'goride', 'maxim', 'krl', 'mrt', 'lrt', 'transjakarta', 'busway', 'kereta', 'tiket pesawat', 'travel', 'taksi', 'taxi', 'bluebird', 'servis motor', 'servis mobil', 'ganti oli', 'oli', 'ban'] },
-    { name: 'Kebutuhan Harian', color: '#2f9e6f', words: ['sabun', 'shampo', 'sampo', 'odol', 'deterjen', 'beras', 'minyak goreng', 'telur', 'galon', 'gas elpiji', 'elpiji', 'indomaret', 'alfamart', 'supermarket', 'belanja bulanan', 'belanja dapur', 'tisu', 'pasar', 'sayur', 'buah', 'gula', 'garam', 'popok', 'susu', 'pembersih', 'pewangi', 'sembako', 'laundry', 'cukur'] },
-    { name: 'Hiburan', color: '#a855c7', words: ['nonton', 'bioskop', 'netflix', 'spotify', 'game', 'steam', 'konser', 'karaoke', 'liburan', 'wisata', 'youtube', 'disney', 'hbo', 'vidio', 'top up', 'topup', 'diamond', 'main', 'hotel', 'villa', 'tiket masuk', 'rekreasi', 'hobi'] },
-    { name: 'Tagihan & Utilitas', color: '#d4a017', words: ['listrik', 'pln', 'token listrik', 'air pdam', 'pdam', 'wifi', 'internet', 'indihome', 'pulsa', 'paket data', 'kos', 'kontrakan', 'sewa', 'cicilan', 'angsuran', 'pajak', 'pbb', 'stnk', 'asuransi', 'tagihan', 'iuran', 'langganan', 'kartu kredit', 'listrik'] },
-    { name: 'Kesehatan', color: '#d6455d', words: ['obat', 'apotek', 'dokter', 'klinik', 'rumah sakit', 'rs ', 'vitamin', 'bpjs', 'gym', 'fitness', 'medical', 'cek lab', 'periksa', 'dentist', 'dokter gigi', 'masker'] },
-    { name: 'Pendidikan', color: '#4a6fd3', words: ['buku', 'kursus', 'sekolah', 'spp', 'kuliah', 'les', 'udemy', 'coursera', 'seminar', 'alat tulis', 'atk', 'fotokopi', 'print', 'ukt', 'bimbel'] },
-    { name: 'Belanja', color: '#d65fa0', words: ['baju', 'sepatu', 'tas', 'shopee', 'tokopedia', 'lazada', 'tiktok shop', 'gadget', 'elektronik', 'kaos', 'celana', 'jaket', 'hp', 'laptop', 'headset', 'charger', 'skincare', 'kosmetik', 'parfum', 'furniture', 'perabot', 'aksesoris', 'kado'] },
-    { name: 'Donasi & Sosial', color: '#5b9aa0', words: ['sedekah', 'zakat', 'infaq', 'infak', 'donasi', 'hadiah', 'arisan', 'sumbangan', 'amal', 'kondangan', 'angpao', 'traktir', 'patungan'] },
-    { name: 'Lainnya', color: '#8a8f98', words: [] },
+  const EXPENSE_CATEGORIES = [
+    { name: 'Makan & Minum', color: '#f97316', words: ['makan', 'minum', 'kopi', 'sarapan', 'lunch', 'dinner', 'nasi', 'ayam', 'bakso', 'mie', 'soto', 'warteg', 'resto', 'restoran', 'cafe', 'kafe', 'gofood', 'grabfood', 'shopeefood', 'boba', 'jajan', 'snack', 'camilan', 'roti', 'es teh', 'teh', 'jus', 'martabak', 'sate', 'pizza', 'burger', 'kfc', 'mcd', 'starbucks', 'warung', 'kantin', 'catering', 'seblak', 'gorengan'] },
+    { name: 'Transportasi', color: '#3b82f6', words: ['bensin', 'pertalite', 'pertamax', 'solar', 'parkir', 'tol', 'ojek', 'gojek', 'grab', 'gocar', 'goride', 'maxim', 'krl', 'mrt', 'lrt', 'transjakarta', 'busway', 'kereta', 'tiket pesawat', 'travel', 'taksi', 'taxi', 'bluebird', 'servis motor', 'servis mobil', 'ganti oli', 'oli', 'ban'] },
+    { name: 'Kebutuhan Harian', color: '#22c55e', words: ['sabun', 'shampo', 'sampo', 'odol', 'deterjen', 'beras', 'minyak goreng', 'telur', 'galon', 'gas elpiji', 'elpiji', 'indomaret', 'alfamart', 'supermarket', 'belanja bulanan', 'belanja dapur', 'tisu', 'pasar', 'sayur', 'buah', 'gula', 'garam', 'popok', 'susu', 'pembersih', 'pewangi', 'sembako', 'laundry', 'cukur'] },
+    { name: 'Hiburan', color: '#a855f7', words: ['nonton', 'bioskop', 'netflix', 'spotify', 'game', 'steam', 'konser', 'karaoke', 'liburan', 'wisata', 'youtube', 'disney', 'hbo', 'vidio', 'top up', 'topup', 'diamond', 'main', 'hotel', 'villa', 'tiket masuk', 'rekreasi', 'hobi'] },
+    { name: 'Tagihan & Utilitas', color: '#eab308', words: ['listrik', 'pln', 'token listrik', 'air pdam', 'pdam', 'wifi', 'internet', 'indihome', 'pulsa', 'paket data', 'kos', 'kontrakan', 'sewa', 'cicilan', 'angsuran', 'pajak', 'pbb', 'stnk', 'asuransi', 'tagihan', 'iuran', 'langganan', 'kartu kredit'] },
+    { name: 'Kesehatan', color: '#ef4444', words: ['obat', 'apotek', 'dokter', 'klinik', 'rumah sakit', 'rs ', 'vitamin', 'bpjs', 'gym', 'fitness', 'medical', 'cek lab', 'periksa', 'dentist', 'dokter gigi', 'masker'] },
+    { name: 'Pendidikan', color: '#6366f1', words: ['buku', 'kursus', 'sekolah', 'spp', 'kuliah', 'les', 'udemy', 'coursera', 'seminar', 'alat tulis', 'atk', 'fotokopi', 'print', 'ukt', 'bimbel'] },
+    { name: 'Belanja', color: '#ec4899', weak: ['shopee', 'tokopedia', 'tokped', 'lazada', 'tiktok shop'], words: ['baju', 'sepatu', 'tas', 'gadget', 'elektronik', 'kaos', 'celana', 'jaket', 'hp', 'laptop', 'headset', 'charger', 'skincare', 'kosmetik', 'parfum', 'furniture', 'perabot', 'aksesoris', 'kado'] },
+    { name: 'Donasi & Sosial', color: '#06b6d4', words: ['sedekah', 'zakat', 'infaq', 'infak', 'donasi', 'hadiah', 'arisan', 'sumbangan', 'amal', 'kondangan', 'angpao', 'traktir', 'patungan'] },
+    { name: 'Investasi', color: '#0f766e', words: ['investasi', 'saham', 'reksadana', 'reksa dana', 'emas', 'antam', 'tabungan emas', 'crypto', 'kripto', 'bitcoin', 'btc', 'bibit', 'ajaib', 'bareksa', 'stockbit', 'pluang', 'indodax', 'tokocrypto', 'deposito', 'obligasi', 'sbn', 'sukuk', 'ori', 'rdn', 'dca', 'p2p', 'dana pensiun', 'top up rdn'] },
+    { name: 'Lainnya', color: '#94a3b8', words: [] },
   ];
+
+  const INCOME_CATEGORIES = [
+    { name: 'Gaji', color: '#16a34a', words: ['gaji', 'gajian', 'salary', 'payroll', 'upah', 'slip gaji'] },
+    { name: 'Bonus & THR', color: '#f59e0b', words: ['bonus', 'thr', 'insentif', 'tunjangan', 'lembur', 'reward'] },
+    { name: 'Usaha & Freelance', color: '#8b5cf6', words: ['freelance', 'proyek', 'project', 'honor', 'honorarium', 'fee', 'komisi', 'jualan', 'penjualan', 'hasil jual', 'jual', 'usaha', 'omzet', 'order', 'endorse', 'ads'] },
+    { name: 'Hasil Investasi', color: '#0d9488', words: ['dividen', 'bunga', 'bunga deposito', 'kupon', 'return', 'bagi hasil', 'cuan', 'profit', 'capital gain', 'sewa masuk', 'royalti'] },
+    { name: 'Hadiah & Transfer', color: '#ec4899', words: ['hadiah', 'transfer masuk', 'kiriman', 'uang saku', 'angpao', 'warisan', 'cashback', 'refund', 'pengembalian', 'diterima', 'terima', 'ditransfer', 'patungan'] },
+    { name: 'Lainnya', color: '#94a3b8', words: [] },
+  ];
+
+  // dipakai oleh versi lama / kompatibilitas
+  const CATEGORIES = EXPENSE_CATEGORIES;
+  const catsFor = (type) => (type === 'income' ? INCOME_CATEGORIES : EXPENSE_CATEGORIES);
+  const catColor = (type, name) => {
+    const list = catsFor(type);
+    return (list.find((c) => c.name === name) || list[list.length - 1]).color;
+  };
 
   const MONTHS = ['januari', 'februari', 'maret', 'april', 'mei', 'juni', 'juli', 'agustus', 'september', 'oktober', 'november', 'desember'];
   const MONTH_ABBR = ['jan', 'feb', 'mar', 'apr', 'mei', 'jun', 'jul', 'agu', 'sep', 'okt', 'nov', 'des'];
@@ -30,11 +48,12 @@
   };
   const addDays = (d, n) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
 
-  function categorize(text) {
+  function categorize(text, type) {
+    const list = catsFor(type);
     const t = ' ' + String(text).toLowerCase() + ' ';
     let best = null;
     let bestLen = 0;
-    for (const c of CATEGORIES) {
+    for (const c of list) {
       for (const w of c.words) {
         if (w.length > bestLen && t.indexOf(w.length <= 3 ? ' ' + w.trim() + ' ' : w) !== -1) {
           best = c.name;
@@ -42,12 +61,25 @@
         }
       }
     }
+    if (!best) {
+      // nama marketplace hanya menentukan kategori bila tidak ada kata lain yang cocok
+      for (const c of list) {
+        if (c.weak && c.weak.some((w) => t.indexOf(w) !== -1)) { best = c.name; break; }
+      }
+    }
     return best || 'Lainnya';
+  }
+
+  const INCOME_RE = /(^\s*\+)|\b(gaji|gajian|salary|payroll|bonus|thr|dividen|pemasukan|income|honor|honorarium|komisi|cashback|refund|freelance|insentif|uang saku|diterima|terima|hasil jual|penjualan|omzet|bagi hasil|transfer masuk)\b/i;
+  /** Kembalikan 'income' bila teks jelas pemasukan, selain itu 'expense' */
+  function detectType(text) {
+    return INCOME_RE.test(String(text)) ? 'income' : 'expense';
   }
 
   function detectMethod(text) {
     const t = text.toLowerCase();
-    if (/\b(gopay|ovo|dana|shopeepay|linkaja|qris|e-?wallet)\b/.test(t)) return 'E-wallet';
+    // Tokopedia & Shopee dianggap e-wallet
+    if (/\b(shopee\w*|tokopedia|tokped|gopay|ovo|dana|linkaja|qris|e-?wallet)\b/.test(t)) return 'E-wallet';
     if (/\b(transfer|tf)\b/.test(t)) return 'Transfer';
     if (/\b(cash|tunai)\b/.test(t)) return 'Tunai';
     if (/\b(kartu|debit|kredit|cc)\b/.test(t)) return 'Kartu';
@@ -118,7 +150,6 @@
       return { amount: Math.round(parseFloat(m[1].replace(',', '.')) * 1e6), rest: s.replace(m[0], ' ') };
     }
     if ((m = /(\d+(?:[.,]\d+)?)\s*(rb|ribu|k)\b/i.exec(s))) {
-      // "25.000rb" tidak lazim; tangani "1.5k"/"1,5rb" sebagai desimal
       const raw = m[1];
       const val = /^\d{1,3}(?:\.\d{3})+$/.test(raw) ? parseInt(raw.replace(/\./g, ''), 10) : parseFloat(raw.replace(',', '.')) * 1e3;
       return { amount: Math.round(val), rest: s.replace(m[0], ' ') };
@@ -148,44 +179,48 @@
     return t.charAt(0).toUpperCase() + t.slice(1);
   }
 
-  /** Parse satu baris chat -> entri */
-  function parseEntry(line, base) {
-    const original = line.trim();
-    if (!original) return null;
+  /**
+   * Parse satu baris chat -> entri.
+   * forceType = 'income' memaksa pemasukan; selain itu tipe dideteksi dari kata kunci (default pengeluaran).
+   */
+  function parseEntry(line, base, forceType) {
+    const raw = line.trim();
+    if (!raw) return null;
+    const type = forceType === 'income' ? 'income' : detectType(raw);
+    const original = raw.replace(/^\+\s*/, '');
     const method = detectMethod(original);
     const d = extractDate(original, base);
     const a = extractAmount(d.rest);
     const desc = cleanDesc(a.rest) || original;
     return {
+      type: type,
       date: ymd(d.date),
       desc: desc,
       amount: a.amount,
-      category: categorize(original),
+      category: categorize(original, type),
       method: method,
       source: 'chat',
     };
   }
 
   /** Parse pesan (boleh banyak baris, dipisah newline atau titik koma) */
-  function parseMessage(text, base) {
+  function parseMessage(text, base, forceType) {
     return String(text)
       .split(/[\n;]+/)
       .map((l) => l.trim())
       .filter(Boolean)
-      .map((l) => ({ raw: l, entry: parseEntry(l, base) }));
+      .map((l) => ({ raw: l, entry: parseEntry(l, base, forceType) }));
   }
 
-  /** Parse teks hasil OCR struk -> entri */
+  /** Parse teks hasil OCR struk -> entri (selalu pengeluaran) */
   function parseReceipt(text, base) {
     base = base || new Date();
     const lines = String(text).split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
     const numRe = /\d{1,3}(?:[.,]\d{3})+(?:[.,]\d{1,2})?|\d{4,}(?:[.,]\d{1,2})?/g;
     const lineNums = (l) => (l.match(numRe) || []).map(toInt).filter((n) => n && n >= 500 && n < 1e9);
 
-    const keyRe = /(grand\s*total|total\s*(?:bayar|belanja|tagihan|harga)?|jumlah|tagihan|amount\s*due|total\s*due|bayar|netto|subtotal)/i;
     const skipRe = /(kembali|change|tunai|cash|diskon|discount|ppn|pajak|tax|poin|point)/i;
     let amount = null;
-    // prioritaskan "grand total", lalu total, lalu jumlah dst. Ambil yang paling bawah dalam kategori terkuat
     const tiers = [/grand\s*total/i, /total\s*(?:bayar|belanja|tagihan)/i, /^total\b|\btotal\b/i, /tagihan|amount\s*due|jumlah|netto/i, /bayar/i];
     for (const tier of tiers) {
       for (let i = lines.length - 1; i >= 0; i--) {
@@ -234,10 +269,11 @@
     merchant = merchant.replace(/[^\w\s&.'\-]/g, ' ').replace(/\s+/g, ' ').trim();
 
     return {
+      type: 'expense',
       date: ymd(date),
       desc: merchant ? 'Struk: ' + merchant : 'Struk belanja',
       amount: amount,
-      category: categorize(text),
+      category: categorize(text, 'expense'),
       method: detectMethod(text),
       source: 'foto',
     };
@@ -284,6 +320,10 @@
     return items.filter((x) => x.date >= s && x.date <= e);
   }
 
+  function ofType(items, type) {
+    return items.filter((x) => (x.type === 'income' ? 'income' : 'expense') === type);
+  }
+
   function sum(items) { return items.reduce((t, x) => t + x.amount, 0); }
 
   function byCategory(items) {
@@ -316,10 +356,11 @@
     return out;
   }
 
-  /** Batas "pengeluaran besar": otomatis dari riwayat, kecuali diisi manual */
+  /** Batas "pengeluaran besar": otomatis dari riwayat pengeluaran, kecuali diisi manual */
   function bigThreshold(all, manual) {
     if (manual && manual > 0) return manual;
-    const a = all.map((x) => x.amount).sort((p, q) => p - q);
+    // investasi bukan pemborosan, jadi tidak ikut menentukan batas "besar"
+    const a = ofType(all, 'expense').filter((x) => x.category !== 'Investasi').map((x) => x.amount).sort((p, q) => p - q);
     if (a.length < 8) return 500000;
     const mean = a.reduce((t, v) => t + v, 0) / a.length;
     const sd = Math.sqrt(a.reduce((t, v) => t + (v - mean) * (v - mean), 0) / a.length);
@@ -328,7 +369,8 @@
   }
 
   function rupiah(n) {
-    return 'Rp ' + Math.round(n).toLocaleString('id-ID');
+    const v = Math.round(n);
+    return (v < 0 ? '-Rp ' : 'Rp ') + Math.abs(v).toLocaleString('id-ID');
   }
 
   function periodLabel(mode, range) {
@@ -340,8 +382,9 @@
   }
 
   return {
-    CATEGORIES, categorize, parseEntry, parseMessage, parseReceipt, extractDate, extractAmount,
-    periodRange, shiftAnchor, previousRange, inRange, sum, byCategory, buckets, bigThreshold,
+    CATEGORIES, EXPENSE_CATEGORIES, INCOME_CATEGORIES, catsFor, catColor,
+    categorize, detectType, detectMethod, parseEntry, parseMessage, parseReceipt, extractDate, extractAmount,
+    periodRange, shiftAnchor, previousRange, inRange, ofType, sum, byCategory, buckets, bigThreshold,
     rupiah, periodLabel, ymd, parseYmd, addDays,
   };
 });

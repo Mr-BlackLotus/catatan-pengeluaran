@@ -35,7 +35,7 @@
   // mode 'google' = Drive pengguna lewat login Google. Konfigurasi lama (url + token Apps Script) hanya
   // dipertahankan agar pengguna lama tetap bisa membuka datanya dan memindahkannya lewat login Google.
   const googleMode = () => cfg.mode === 'google';
-  const connected = () => googleMode() || Boolean(cfg.url && cfg.token);
+  const connected = () => googleMode();
   const GB = () => window.GoogleBackend;
   const googleReady = () => Boolean(GB() && GB().configured());
 
@@ -73,17 +73,11 @@
   // ---------- data layer ----------
   async function api(action, payload) {
     if (googleMode()) return GB().call(action, payload);
-    const res = await fetch(cfg.url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify(Object.assign({ token: cfg.token, action: action }, payload || {})),
-    });
-    if (!res.ok) throw new Error('Server membalas ' + res.status);
-    const j = await res.json();
-    if (!j.ok) throw new Error(j.error || 'Gagal');
-    return j;
+    const err = new Error('Belum masuk ke Google');
+    err.code = 'AUTH';
+    throw err;
   }
-  const persistLocal = () => { if (!connected()) store.set('et_local', data); else store.set('et_cache', data); };
+  const persistLocal = () => { if (connected()) store.set('et_cache', data); };
 
   function connLabel() {
     if (googleMode()) {
@@ -102,16 +96,27 @@
     $('#banner-text').textContent = reauth
       ? 'Sesi Google berakhir. Ketuk untuk menyambung lagi — catatan Anda tetap aman di Drive.'
       : g
-        ? 'Masuk dengan akun Google agar catatan tersimpan otomatis di Google Drive Anda sendiri. Tanpa pengaturan.'
-        : 'Belum terhubung ke Google Sheets. Data sementara hanya tersimpan di browser ini.';
+        ? 'Tidak terhubung ke Google Drive. Masuk dengan akun Google untuk melihat dan menyimpan catatan di Drive Anda sendiri.'
+        : 'Tidak terhubung ke Google Drive.';
     $('#banner-google').hidden = !g;
     $('#banner-google').textContent = reauth ? 'Sambungkan lagi' : 'Masuk dengan Google';
   }
 
+  // hapus semua sisa data di browser (termasuk konfigurasi Apps Script lama)
+  function wipeLocal() {
+    store.set('et_local', []);
+    store.set('et_cache', []);
+    if (cfg.url || cfg.token) {
+      cfg = Object.assign({}, cfg, { url: undefined, token: undefined });
+      store.set('et_cfg', cfg);
+    }
+  }
+
   async function load() {
     if (!connected()) {
-      data = store.get('et_local', []).map(norm);
-      setStatus('local', 'Mode lokal (belum terhubung ke Drive)');
+      wipeLocal();
+      data = [];
+      setStatus('err', 'Tidak terhubung ke Google Drive');
       updateBanner('signin');
       render();
       return;
@@ -141,9 +146,7 @@
       ? 'Masuk sebagai ' + (p ? p.name + ' (' + p.email + ')' : 'akun Google') + '. Catatan tersimpan di spreadsheet "Catatan Keuangan" di Google Drive Anda.'
       : !ready
         ? 'Login Google belum diaktifkan pada aplikasi ini.'
-        : connected()
-          ? 'Catatan Anda masih memakai penyimpanan lama. Masuk dengan Google untuk pindah; catatan yang tampil bisa disalin ke Drive Anda.'
-          : 'Belum masuk. Masuk dengan Google untuk menyimpan catatan di Drive Anda sendiri.';
+        : 'Belum masuk. Masuk dengan Google untuk menyimpan catatan di Drive Anda sendiri.';
     $('#acct-signin').hidden = g || !ready;
     $('#acct-switch').hidden = !g;
     $('#acct-signout').hidden = !g;
@@ -155,9 +158,6 @@
   async function googleSignIn(opts) {
     if (!googleReady()) { toast('Login Google belum diaktifkan pada aplikasi ini.'); return false; }
     const wasGoogle = googleMode();
-    const wasConnected = connected();
-    // catatan yang ada sebelum masuk (lokal, atau dari Apps Script) boleh dibawa ke akun Google
-    const carry = wasGoogle ? [] : wasConnected ? data.slice() : store.get('et_local', []).map(norm);
     setStatus('local', 'Membuka login Google…');
     try {
       await GB().signIn(opts);
@@ -167,16 +167,8 @@
       toast('Login gagal: ' + e.message);
       return false;
     }
-    if (!wasGoogle) store.set('et_cache', []);
     cfg = Object.assign({}, cfg, { mode: 'google' });
     store.set('et_cfg', cfg);
-    if (carry.length && confirm('Salin ' + carry.length + ' catatan yang sudah ada ke akun Google ini?')) {
-      try {
-        await api('add', { items: carry });
-        if (!wasConnected) store.set('et_local', []);
-        toast('Catatan disalin ke Google Drive');
-      } catch (e) { toast('Gagal menyalin catatan: ' + e.message); }
-    }
     updateAccountUI();
     await load();
     return true;
@@ -186,19 +178,21 @@
     if (GB()) GB().signOut();
     cfg = Object.assign({}, cfg, { mode: undefined });
     store.set('et_cfg', cfg);
-    store.set('et_cache', []);
+    wipeLocal();
+    data = [];
     updateAccountUI();
     load();
   }
 
   async function saveItems(items) {
+    if (!connected()) { updateBanner('signin'); const e = new Error('Belum masuk ke Google Drive. Masuk dulu agar catatan tersimpan.'); e.code = 'AUTH'; throw e; }
     const withId = items.map((i) => norm(Object.assign({ id: uid() }, i)));
     const forServer = withId.map((i) => Object.assign({}, i));
     withId.forEach((i) => { delete i.receipt; });
     data = data.concat(withId);
     persistLocal();
     render();
-    if (connected()) {
+    {
       try {
         await api('add', { items: forServer });
         setStatus('ok', 'Tersimpan di ' + connLabel() + ' · ' + data.length + ' catatan');
@@ -216,6 +210,7 @@
   }
 
   async function deleteItems(ids) {
+    if (!connected()) { updateBanner('signin'); const e = new Error('Belum masuk ke Google Drive. Masuk dulu agar catatan tersimpan.'); e.code = 'AUTH'; throw e; }
     const backup = data.slice();
     const set = new Set(ids);
     data = data.filter((d) => !set.has(d.id));
@@ -227,6 +222,7 @@
   }
 
   async function updateItem(item) {
+    if (!connected()) { updateBanner('signin'); const e = new Error('Belum masuk ke Google Drive. Masuk dulu agar catatan tersimpan.'); e.code = 'AUTH'; throw e; }
     const backup = data.slice();
     data = data.map((d) => (d.id === item.id ? norm(Object.assign({}, d, item)) : d));
     persistLocal();

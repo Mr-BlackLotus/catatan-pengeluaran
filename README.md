@@ -51,15 +51,9 @@ Login Google membutuhkan **OAuth Client ID** milik Anda. Nilainya bukan rahasia 
 
 Selama `googleClientId` kosong, tombol "Masuk dengan Google" tidak muncul.
 
-## Pengguna lama (Apps Script)
-
-Versi awal aplikasi ini memakai Google Apps Script. Bila Anda masih memakainya, aplikasi tetap membaca data lama.
-Untuk pindah, buka ⚙ → **Masuk dengan Google**; aplikasi menawarkan menyalin catatan yang sedang tampil ke Drive Anda.
-Berkas `apps-script/Code.gs` hanya disimpan sebagai arsip dan tidak dibutuhkan pengguna baru.
-
 ## Catatan
 
 - Pembacaan foto (OCR) bisa meleset, jadi hasilnya selalu ditampilkan untuk diperiksa sebelum disimpan.
-- Tanpa login, aplikasi berjalan dalam mode lokal (data di browser) dan bisa disalin ke Drive saat Anda masuk.
+- Data hanya ada di Drive Anda. Tanpa login (atau setelah Keluar) aplikasi kosong, status merah "Tidak terhubung ke Google Drive", dan tidak ada catatan yang disimpan di browser.
 - Sesi Google berlaku sekitar 1 jam. Jika berakhir, aplikasi menampilkan tombol **Sambungkan lagi**; catatan tidak hilang.
 - Jangan mengubah nama tab `Pengeluaran` di spreadsheet; aplikasi mencarinya dengan nama itu.

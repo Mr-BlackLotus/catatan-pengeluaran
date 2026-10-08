@@ -213,6 +213,8 @@
     return readMeta(f.id);
   }
 
+  const gone = (e) => e && (e.status === 404 || e.status === 403 || e.status === 'NOTAB');
+
   async function doEnsureSheet() {
     const cached = lsGet('ss', null);
     if (cached && cached.id) {
@@ -220,11 +222,14 @@
         const d = await gfetch(DRIVE + '/' + cached.id + '?fields=id,trashed');
         if (!d.trashed) return await readMeta(cached.id, true);
       } catch (e) {
-        if (e.status !== 404 && e.status !== 403) throw e; // file hilang / bukan milik akun ini: cari ulang
+        if (!gone(e)) throw e; // file hilang / bukan milik akun ini: cari ulang
       }
     }
     const found = await findFile();
-    return found ? readMeta(found, true) : createSheet();
+    if (found) {
+      try { return await readMeta(found, true); } catch (e) { if (!gone(e)) throw e; }
+    }
+    return createSheet(); // tidak ada file yang bisa dipakai: buat baru otomatis
   }
 
   function ensureSheet() {
@@ -356,14 +361,23 @@
     payload = payload || {};
     await ensureToken();
     if (!profile) await loadProfile();
-    await ensureSheet();
-    switch (action) {
-      case 'ping': return { ok: true };
-      case 'list': return { ok: true, items: await list() };
-      case 'add': return { ok: true, added: await add(payload.items || []) };
-      case 'update': return { ok: true, updated: await update(payload.item) };
-      case 'delete': return { ok: true, deleted: await remove(payload.ids || []) };
-      default: throw new Error('Aksi tidak dikenal');
+    // memuat ulang selalu memeriksa lagi apakah file masih ada (bisa saja dihapus/dibuang ke sampah)
+    if (action === 'list') ss = null;
+    const run = async () => {
+      await ensureSheet();
+      switch (action) {
+        case 'ping': return { ok: true };
+        case 'list': return { ok: true, items: await list() };
+        case 'add': return { ok: true, added: await add(payload.items || []) };
+        case 'update': return { ok: true, updated: await update(payload.item) };
+        case 'delete': return { ok: true, deleted: await remove(payload.ids || []) };
+        default: throw new Error('Aksi tidak dikenal');
+      }
+    };
+    try { return await run(); } catch (e) {
+      if (!gone(e)) throw e;
+      ss = null; lsDel('ss'); // file dihapus saat aplikasi terbuka: buat ulang lalu ulangi sekali
+      return run();
     }
   }
 

@@ -6,5 +6,5 @@
  * Selama kosong, tombol "Masuk dengan Google" tidak aktif dan aplikasi memakai mode lanjutan (Apps Script).
  */
 window.APP_CONFIG = {
-  googleClientId: '',
+  googleClientId: '37298618187-nuek936ktohdi5jjckn9rnplfg9ur4jt.apps.googleusercontent.com',
 };

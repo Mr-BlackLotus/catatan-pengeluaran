@@ -98,6 +98,9 @@
       : g
         ? 'Tidak terhubung ke Google Drive. Masuk dengan akun Google untuk melihat dan menyimpan catatan di Drive Anda sendiri.'
         : 'Tidak terhubung ke Google Drive.';
+    if (!reauth && g && /FBAN|FBAV|Instagram|Line\/|WhatsApp|; wv\)|MicroMessenger|TikTok|Twitter/i.test(navigator.userAgent)) {
+      $('#banner-text').textContent += ' Jika login gagal, buka link ini di Chrome atau Safari (bukan di dalam aplikasi lain).';
+    }
     $('#banner-google').hidden = !g;
     $('#banner-google').textContent = reauth ? 'Sambungkan lagi' : 'Masuk dengan Google';
   }
@@ -112,6 +115,7 @@
     }
   }
 
+  let syncing = false;
   async function load() {
     if (!connected()) {
       wipeLocal();
@@ -125,6 +129,7 @@
     data = store.get('et_cache', []).map(norm);
     render();
     setStatus('local', 'Menyinkronkan…');
+    syncing = true;
     try {
       const j = await api('list');
       data = j.items.map(norm);
@@ -133,7 +138,7 @@
     } catch (e) {
       if (e.code === 'AUTH') { setStatus('err', 'Perlu masuk lagi ke Google'); updateBanner('reauth'); }
       else setStatus('err', 'Gagal terhubung: ' + e.message);
-    }
+    } finally { syncing = false; }
     render();
   }
 
@@ -444,6 +449,11 @@
     node.className = (pct > 0) === upIsGood ? 'pos' : 'neg';
   }
 
+  function emptyText() {
+    if (data.length && mode !== 'all') return 'Tidak ada catatan di periode ini, tetapi ada ' + data.length + ' catatan di periode lain. Pilih "Semua" atau ketuk ‹ untuk melihatnya.';
+    return 'Belum ada catatan di periode ini.';
+  }
+
   function render() {
     const range = currentRange();
     const inPeriod = L.inRange(data, range);
@@ -533,6 +543,7 @@
 
     const rows = inPeriod.slice().sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : b.id.localeCompare(a.id))).slice(0, 10);
     $('#sum-empty').hidden = rows.length > 0;
+    $('#sum-empty').textContent = emptyText();
     renderRows($('#list-sum'), rows, Infinity, true);
   }
 
@@ -601,6 +612,7 @@
     let rows = items.filter((x) => (!fc || x.category === fc) && (!q || (x.desc + ' ' + x.category).toLowerCase().includes(q)));
     rows = rows.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : b.id.localeCompare(a.id)));
     $('#table-empty').hidden = rows.length > 0;
+    $('#table-empty').textContent = emptyText();
     renderRows($('#list'), rows.slice(0, visible), isOut ? threshold : Infinity, false);
     $('#more').hidden = rows.length <= visible;
   }
@@ -780,6 +792,12 @@
       try { await deleteItems([editing.id]); toast('Catatan dihapus'); } catch (err) { toast('Gagal menghapus: ' + err.message); }
     });
 
+    if (GB()) GB().preload();
+    // sinkron ulang dari Drive saat aplikasi dibuka kembali (mis. setelah mencatat di device lain)
+    let lastSync = Date.now();
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible' && connected() && Date.now() - lastSync > 20000 && !syncing) { lastSync = Date.now(); load(); }
+    });
     updateAccountUI();
     load();
   }

@@ -45,17 +45,22 @@
   const enc = encodeURIComponent;
 
   // ---------- login ----------
+  let gisPromise = null;
   function loadGis() {
     if (window.google && window.google.accounts && window.google.accounts.oauth2) return Promise.resolve();
-    return new Promise((resolve, reject) => {
+    if (gisPromise) return gisPromise;
+    gisPromise = new Promise((resolve, reject) => {
       const s = document.createElement('script');
       s.src = 'https://accounts.google.com/gsi/client';
       s.async = true;
       s.onload = resolve;
-      s.onerror = () => reject(new AuthError('Layanan Google tidak bisa dimuat. Cek koneksi internet.'));
+      s.onerror = () => { gisPromise = null; s.remove(); reject(new AuthError('Layanan Google tidak bisa dimuat. Cek koneksi internet.')); };
       document.head.appendChild(s);
     });
+    return gisPromise;
   }
+  // dimuat lebih awal agar popup login langsung terbuka saat tombol ditekan (HP memblokir popup yang terlambat)
+  function preload() { if (configured()) loadGis().catch(() => {}); }
 
   function requestToken(opts) {
     if (tokenPromise) return tokenPromise;
@@ -371,6 +376,7 @@
 
   window.GoogleBackend = {
     configured: configured,
+    preload: preload,
     signIn: signIn,
     signOut: signOut,
     call: call,

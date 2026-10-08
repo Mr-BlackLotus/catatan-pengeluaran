@@ -1,37 +1,72 @@
 # Catatan Keuangan
 
-Web app gratis untuk mencatat pengeluaran dan pemasukan. Data disimpan di Google Sheets milik Anda,
-tampilan web di-host gratis lewat GitHub Pages.
+Web app gratis untuk mencatat pengeluaran dan pemasukan. Setiap pengguna **masuk dengan akun Google-nya sendiri**,
+dan datanya tersimpan di spreadsheet di **Google Drive pengguna itu sendiri**. Tampilan web di-host gratis lewat GitHub Pages.
+
+## Untuk pengguna (cukup 3 langkah)
+
+1. Buka link aplikasi yang dibagikan.
+2. Klik **Masuk dengan Google**, pilih akun, lalu **izinkan** akses Google Drive.
+3. Selesai. Spreadsheet "Catatan Keuangan" otomatis dibuat di Drive Anda. Tinggal catat.
+
+Aplikasi hanya meminta izin `drive.file`: ia hanya bisa melihat file yang **ia buat sendiri**, bukan seluruh isi Drive Anda.
+Data tidak melewati server pihak lain; browser Anda langsung berbicara dengan Google.
+
+## Fitur
 
 - Tiga tab: **Ringkasan** (saldo, rasio tabung, pemasukan vs pengeluaran), **Pengeluaran**, **Pemasukan**
 - Catat lewat chat: `makan siang 25rb`, `bensin 50.000 kemarin`, `gaji 8jt`, `beli saham 500rb`
-- Catat lewat foto struk (dibaca di browser, foto bukti ikut tersimpan di Drive)
+- Catat lewat foto struk (dibaca di browser, foto bukti ikut tersimpan di Drive pengguna)
 - Kategori otomatis. Pengeluaran: Makan & Minum, Transportasi, Kebutuhan Harian, Hiburan, Tagihan & Utilitas, Kesehatan, Pendidikan, Belanja, Donasi & Sosial, Investasi, Lainnya. Pemasukan: Gaji, Bonus & THR, Usaha & Freelance, Hasil Investasi, Hadiah & Transfer, Lainnya
 - Metode pembayaran terdeteksi otomatis (Tokopedia, Shopee, GoPay, OVO, Dana, QRIS → E-wallet)
 - Pantau per minggu / bulan / tahun / semua, dengan grafik dan perbandingan periode sebelumnya
 - Peringatan pengeluaran besar (batas otomatis dari riwayat, bisa diatur manual; investasi tidak dihitung)
-- Mode terang dan gelap (tombol di pojok kanan atas)
+- Mode terang dan gelap
 
-## Pasang (sekali saja, ±5 menit)
+## Untuk pemilik aplikasi: aktifkan login Google (sekali saja, ±10 menit)
 
-### 1. Backend di Google Sheets
-1. Buka editor Apps Script (spreadsheet → **Ekstensi → Apps Script**).
-2. Hapus isi editor, tempel seluruh isi `apps-script/Code.gs`.
-3. Ganti `TOKEN` di baris atas dengan kode rahasia buatan Anda (campuran huruf dan angka, minimal 16 karakter).
-4. Pilih fungsi **setup** → **Run** → izinkan akses (membuat sheet `Pengeluaran` dan `Ringkasan`).
-5. **Deploy → New deployment → Web app**: Execute as **Me**, Who has access **Anyone**. Salin **Web app URL** (berakhiran `/exec`).
+Login Google membutuhkan **OAuth Client ID** milik Anda. Nilainya bukan rahasia dan memang ditaruh di kode publik.
+
+1. Buka <https://console.cloud.google.com/> dan buat proyek baru (mis. "Catatan Keuangan").
+2. **APIs & Services → Library**: aktifkan **Google Sheets API** dan **Google Drive API**.
+3. **Google Auth Platform** (atau "OAuth consent screen") → **Get started**:
+   - App name: `Catatan Keuangan`, isi email dukungan dan email kontak.
+   - Audience: **External**.
+4. Menu **Data Access** → **Add or remove scopes**, tambahkan: `openid`, `.../auth/userinfo.email`, `.../auth/userinfo.profile`, dan `.../auth/drive.file`. Simpan.
+5. Menu **Audience** (status publikasi):
+   - **Testing**: hanya akun yang Anda daftarkan di *Test users* (maksimal 100) yang bisa masuk. Paling mudah untuk beberapa orang. Tambahkan email setiap teman di sini.
+   - **In production** (*Publish app*): siapa saja yang punya link bisa masuk. Karena hanya memakai scope `drive.file` (non-sensitif), tidak perlu tinjauan keamanan, tetapi Google bisa menampilkan peringatan "aplikasi belum diverifikasi" sampai Anda mengajukan verifikasi.
+6. Menu **Clients → Create client** → tipe **Web application**:
+   - **Authorized JavaScript origins**: `https://mr-blacklotus.github.io` (tanpa garis miring di akhir dan tanpa nama repo).
+   - Redirect URI tidak perlu diisi.
+7. Salin **Client ID** (berakhiran `.apps.googleusercontent.com`), lalu tempel di `config.js`:
+
+   ```js
+   window.APP_CONFIG = {
+     googleClientId: '1234567890-abc.apps.googleusercontent.com',
+   };
+   ```
+
+   Commit perubahan itu. GitHub Pages akan memperbaruinya dalam 1-2 menit.
+
+Selama `googleClientId` kosong, tombol "Masuk dengan Google" tidak muncul dan aplikasi memakai mode lanjutan.
+
+## Mode lanjutan: Apps Script (opsional)
+
+Untuk yang ingin memakai spreadsheet sendiri lewat Google Apps Script (cara awal aplikasi ini). Pengguna biasa tidak perlu ini.
+
+1. Buka editor Apps Script (spreadsheet → **Ekstensi → Apps Script**), tempel isi `apps-script/Code.gs`.
+2. Ganti `TOKEN` dengan kode rahasia buatan Anda (huruf dan angka acak, minimal 16 karakter).
+3. Jalankan fungsi **setup** sekali, lalu **Deploy → New deployment → Web app** (Execute as **Me**, Who has access **Anyone**). Salin URL `/exec`.
+4. Di aplikasi: ⚙ → **Mode lanjutan** → isi URL dan TOKEN → **Pakai Apps Script**.
 
 > Memperbarui `Code.gs` yang sudah pernah di-deploy: tempel kode baru, atur ulang `TOKEN`, jalankan `setup`,
 > lalu **Deploy → Manage deployments → ikon pensil → Version: New version → Deploy**. URL tidak berubah.
-> Sheet lama otomatis mendapat kolom `Tipe`; data lama dianggap pengeluaran.
-
-### 2. Web
-Buka situs GitHub Pages Anda → ikon ⚙ → isi **URL Web App** dan **TOKEN** → **Tes koneksi** → Simpan.
-
-## Keamanan
-Situs ini publik, tetapi data hanya bisa dibaca/ditulis oleh yang punya TOKEN. TOKEN disimpan di browser Anda
-(tidak ada di kode GitHub). Jangan membagikan URL Web App bersama TOKEN-nya.
 
 ## Catatan
+
 - Pembacaan foto (OCR) bisa meleset, jadi hasilnya selalu ditampilkan untuk diperiksa sebelum disimpan.
-- Tanpa koneksi ke Drive, aplikasi berjalan dalam mode lokal (data di browser) dan bisa dikirim ke Sheets nanti.
+- Tanpa login, aplikasi berjalan dalam mode lokal (data di browser) dan bisa disalin ke Drive saat Anda masuk.
+- Sesi Google berlaku sekitar 1 jam. Jika berakhir, aplikasi menampilkan tombol **Sambungkan lagi**; catatan tidak hilang.
+- Jangan mengubah nama tab `Pengeluaran` di spreadsheet; aplikasi mencarinya dengan nama itu.
+- Memindahkan data dari mode Apps Script ke akun Google: saat masuk dengan Google, aplikasi menawarkan menyalin catatan yang sedang tampil.

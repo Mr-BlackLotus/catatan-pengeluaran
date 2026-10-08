@@ -93,7 +93,10 @@ main > div { display: grid; gap: 16px; }
 .grid2 { display: grid; gap: 16px; grid-template-columns: 1fr; }
 @media (min-width: 860px) { .grid2 { grid-template-columns: 3fr 2fr; } }
 
-.banner { background: var(--warn-bg); color: var(--warn); border-radius: 12px; padding: 10px 14px; font-size: 14px; }
+.banner { background: var(--soft); color: var(--ink); border: 1px solid color-mix(in srgb, var(--brand) 35%, var(--line)); border-radius: var(--radius); padding: 14px 16px; font-size: 14px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; }
+.banner-text { flex: 1 1 260px; }
+.banner-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.banner .primary { min-height: 44px; padding: 8px 18px; }
 
 /* ---------- kontrol ---------- */
 button { cursor: pointer; border: 1px solid var(--line); background: var(--card); border-radius: 11px; padding: 8px 14px; min-height: 40px; transition: background-color .15s, border-color .15s, transform .05s; }
@@ -230,3 +233,14 @@ dialog::backdrop { background: rgba(5, 8, 20, .55); backdrop-filter: blur(2px); 
 
 @media (max-width: 420px) { .hero strong { font-size: 26px; } }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; scroll-behavior: auto !important; } }
+
+/* ---------- akun & pengaturan ---------- */
+.acct { background: var(--card-2); border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; display: grid; gap: 8px; }
+.acct h3 { margin: 0; }
+.acct p { margin: 0; overflow-wrap: anywhere; }
+.acct-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.adv { border: 1px dashed var(--line); border-radius: 12px; padding: 10px 12px; display: grid; gap: 10px; }
+.adv > summary { cursor: pointer; font-weight: 600; font-size: 14px; }
+.adv[open] > summary { margin-bottom: 8px; }
+.adv > p { margin: 0 0 8px; }
+.adv label { margin-bottom: 8px; }

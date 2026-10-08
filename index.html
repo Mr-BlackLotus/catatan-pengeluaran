@@ -36,8 +36,11 @@
 
 <main>
   <div id="banner" class="banner" hidden>
-    Aplikasi belum terhubung ke Google Sheets. Data sementara hanya tersimpan di browser ini.
-    <button id="banner-setup" class="link-btn">Hubungkan ke Drive</button>
+    <span id="banner-text" class="banner-text"></span>
+    <span class="banner-actions">
+      <button id="banner-google" class="primary" type="button" hidden>Masuk dengan Google</button>
+      <button id="banner-setup" class="link-btn" type="button">Hubungkan ke Drive</button>
+    </span>
   </div>
 
   <!-- TAB -->
@@ -179,18 +182,39 @@
 <dialog id="dlg-settings">
   <form method="dialog" class="dlg" id="settings-form">
     <h2>Pengaturan</h2>
-    <label>URL Web App Google Apps Script
-      <input id="cfg-url" type="url" inputmode="url" placeholder="https://script.google.com/macros/s/…/exec">
-    </label>
-    <label>Kode rahasia (TOKEN)
-      <input id="cfg-token" type="password" autocomplete="off" placeholder="sama dengan TOKEN di Code.gs">
-    </label>
+
+    <section class="acct" aria-labelledby="acct-title">
+      <h3 id="acct-title">Akun Google</h3>
+      <p id="acct-status" class="muted"></p>
+      <div class="acct-actions">
+        <button type="button" id="acct-signin" class="primary">Masuk dengan Google</button>
+        <button type="button" id="acct-switch" class="ghost">Ganti akun</button>
+        <button type="button" id="acct-signout" class="ghost">Keluar</button>
+        <a id="acct-open" class="link-btn" target="_blank" rel="noopener" hidden>Buka spreadsheet</a>
+      </div>
+    </section>
+
     <label>Batas "pengeluaran besar" (Rp)
       <input id="cfg-limit" type="number" min="0" step="1000" placeholder="Kosongkan = otomatis dari riwayat">
     </label>
-    <p id="cfg-msg" class="muted"></p>
+
+    <details id="adv" class="adv">
+      <summary>Mode lanjutan: Apps Script <span id="adv-state" class="muted"></span></summary>
+      <p class="muted">Untuk yang sudah punya Web App Apps Script sendiri. Pengguna biasa tidak perlu mengisi ini.</p>
+      <label>URL Web App Google Apps Script
+        <input id="cfg-url" type="url" inputmode="url" placeholder="https://script.google.com/macros/s/…/exec">
+      </label>
+      <label>Kode rahasia (TOKEN)
+        <input id="cfg-token" type="password" autocomplete="off" placeholder="sama dengan TOKEN di Code.gs">
+      </label>
+      <p id="cfg-msg" class="muted"></p>
+      <div class="row-end">
+        <button type="button" id="cfg-test" class="ghost">Tes koneksi</button>
+        <button type="button" id="cfg-use-script" class="ghost">Pakai Apps Script</button>
+      </div>
+    </details>
+
     <div class="row-end">
-      <button type="button" id="cfg-test" class="ghost">Tes koneksi</button>
       <button type="button" id="cfg-close" class="ghost">Tutup</button>
       <button type="submit" value="save" class="primary">Simpan</button>
     </div>
@@ -220,7 +244,9 @@
 </dialog>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="config.js"></script>
 <script src="lib.js"></script>
+<script src="google.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

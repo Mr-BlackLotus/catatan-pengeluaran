@@ -32,7 +32,11 @@
   let visible = 50;
   const charts = { bar: null, pie: null, sum: null };
 
-  const connected = () => Boolean(cfg.url && cfg.token);
+  // mode 'google' = Drive pengguna lewat login Google; selain itu = Apps Script (url + token) bila diisi
+  const googleMode = () => cfg.mode === 'google';
+  const connected = () => googleMode() || Boolean(cfg.url && cfg.token);
+  const GB = () => window.GoogleBackend;
+  const googleReady = () => Boolean(GB() && GB().configured());
 
   // ---------- util UI ----------
   let toastTimer;
@@ -67,6 +71,7 @@
 
   // ---------- data layer ----------
   async function api(action, payload) {
+    if (googleMode()) return GB().call(action, payload);
     const res = await fetch(cfg.url, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
@@ -79,15 +84,40 @@
   }
   const persistLocal = () => { if (!connected()) store.set('et_local', data); else store.set('et_cache', data); };
 
+  function connLabel() {
+    if (googleMode()) {
+      const p = GB() && GB().getProfile();
+      return 'Google Drive' + (p ? ' · ' + p.given : '');
+    }
+    return 'Google Sheets';
+  }
+
+  function updateBanner(state) {
+    const b = $('#banner');
+    b.hidden = state === 'hidden';
+    if (state === 'hidden') return;
+    const g = googleReady();
+    const reauth = state === 'reauth';
+    $('#banner-text').textContent = reauth
+      ? 'Sesi Google berakhir. Ketuk untuk menyambung lagi — catatan Anda tetap aman di Drive.'
+      : g
+        ? 'Masuk dengan akun Google agar catatan tersimpan otomatis di Google Drive Anda sendiri. Tanpa pengaturan.'
+        : 'Belum terhubung ke Google Sheets. Data sementara hanya tersimpan di browser ini.';
+    $('#banner-google').hidden = !g;
+    $('#banner-google').textContent = reauth ? 'Sambungkan lagi' : 'Masuk dengan Google';
+    $('#banner-setup').hidden = reauth;
+    $('#banner-setup').textContent = g ? 'Mode lanjutan (Apps Script)' : 'Hubungkan ke Drive';
+  }
+
   async function load() {
     if (!connected()) {
       data = store.get('et_local', []).map(norm);
       setStatus('local', 'Mode lokal (belum terhubung ke Drive)');
-      $('#banner').hidden = false;
+      updateBanner('signin');
       render();
       return;
     }
-    $('#banner').hidden = true;
+    updateBanner('hidden');
     data = store.get('et_cache', []).map(norm);
     render();
     setStatus('local', 'Menyinkronkan…');
@@ -95,11 +125,70 @@
       const j = await api('list');
       data = j.items.map(norm);
       persistLocal();
-      setStatus('ok', 'Terhubung ke Google Sheets · ' + data.length + ' catatan');
+      setStatus('ok', 'Terhubung ke ' + connLabel() + ' · ' + data.length + ' catatan');
     } catch (e) {
-      setStatus('err', 'Gagal terhubung: ' + e.message);
+      if (e.code === 'AUTH') { setStatus('err', 'Perlu masuk lagi ke Google'); updateBanner('reauth'); }
+      else setStatus('err', 'Gagal terhubung: ' + e.message);
     }
     render();
+  }
+
+  // ---------- akun Google ----------
+  function updateAccountUI() {
+    const g = googleMode();
+    const ready = googleReady();
+    const p = GB() && GB().getProfile();
+    $('#acct-status').textContent = g
+      ? 'Masuk sebagai ' + (p ? p.name + ' (' + p.email + ')' : 'akun Google') + '. Catatan tersimpan di spreadsheet "Catatan Keuangan" di Google Drive Anda.'
+      : ready
+        ? 'Belum masuk. Masuk dengan Google untuk menyimpan catatan di Drive Anda sendiri.'
+        : 'Login Google belum diaktifkan pada aplikasi ini. Pakai mode lanjutan di bawah.';
+    $('#acct-signin').hidden = g || !ready;
+    $('#acct-switch').hidden = !g;
+    $('#acct-signout').hidden = !g;
+    const url = g && GB() ? GB().spreadsheetUrl() : '';
+    $('#acct-open').hidden = !url;
+    if (url) $('#acct-open').href = url;
+    $('#adv-state').textContent = !g && cfg.url && cfg.token ? '(aktif)' : '';
+  }
+
+  async function googleSignIn(opts) {
+    if (!googleReady()) { toast('Login Google belum diaktifkan pada aplikasi ini.'); return false; }
+    const wasGoogle = googleMode();
+    const wasConnected = connected();
+    // catatan yang ada sebelum masuk (lokal, atau dari Apps Script) boleh dibawa ke akun Google
+    const carry = wasGoogle ? [] : wasConnected ? data.slice() : store.get('et_local', []).map(norm);
+    setStatus('local', 'Membuka login Google…');
+    try {
+      await GB().signIn(opts);
+    } catch (e) {
+      if (wasGoogle) { setStatus('err', 'Perlu masuk lagi ke Google'); updateBanner('reauth'); }
+      else load();
+      toast('Login gagal: ' + e.message);
+      return false;
+    }
+    if (!wasGoogle) store.set('et_cache', []);
+    cfg = Object.assign({}, cfg, { mode: 'google' });
+    store.set('et_cfg', cfg);
+    if (carry.length && confirm('Salin ' + carry.length + ' catatan yang sudah ada ke akun Google ini?')) {
+      try {
+        await api('add', { items: carry });
+        if (!wasConnected) store.set('et_local', []);
+        toast('Catatan disalin ke Google Drive');
+      } catch (e) { toast('Gagal menyalin catatan: ' + e.message); }
+    }
+    updateAccountUI();
+    await load();
+    return true;
+  }
+
+  function googleSignOut() {
+    if (GB()) GB().signOut();
+    cfg = Object.assign({}, cfg, { mode: undefined });
+    store.set('et_cfg', cfg);
+    store.set('et_cache', []);
+    updateAccountUI();
+    load();
   }
 
   async function saveItems(items) {
@@ -112,12 +201,13 @@
     if (connected()) {
       try {
         await api('add', { items: forServer });
-        setStatus('ok', 'Tersimpan di Google Sheets · ' + data.length + ' catatan');
+        setStatus('ok', 'Tersimpan di ' + connLabel() + ' · ' + data.length + ' catatan');
       } catch (e) {
         const ids = new Set(withId.map((i) => i.id));
         data = data.filter((d) => !ids.has(d.id));
         persistLocal();
         render();
+        if (e.code === 'AUTH') updateBanner('reauth');
         setStatus('err', 'Gagal menyimpan: ' + e.message);
         throw e;
       }
@@ -661,15 +751,21 @@
     $('#more').addEventListener('click', () => { visible += 50; render(); });
 
     $('#btn-sync').addEventListener('click', () => { load(); toast(connected() ? 'Memuat ulang dari Drive…' : 'Belum terhubung ke Drive'); });
-    const openSettings = () => {
+    const openSettings = (advanced) => {
+      updateAccountUI();
       $('#cfg-url').value = cfg.url || '';
       $('#cfg-token').value = cfg.token || '';
       $('#cfg-limit').value = cfg.limit || '';
       $('#cfg-msg').textContent = '';
+      $('#adv').open = advanced === true || (!googleReady() && !googleMode());
       $('#dlg-settings').showModal();
     };
-    $('#btn-settings').addEventListener('click', openSettings);
-    $('#banner-setup').addEventListener('click', openSettings);
+    $('#btn-settings').addEventListener('click', () => openSettings());
+    $('#banner-setup').addEventListener('click', () => openSettings(true));
+    $('#banner-google').addEventListener('click', () => googleSignIn());
+    $('#acct-signin').addEventListener('click', async () => { if (await googleSignIn()) $('#dlg-settings').close(); });
+    $('#acct-switch').addEventListener('click', async () => { if (await googleSignIn({ switchAccount: true })) $('#dlg-settings').close(); });
+    $('#acct-signout').addEventListener('click', () => { googleSignOut(); $('#dlg-settings').close(); toast('Keluar dari akun Google'); });
     $('#cfg-close').addEventListener('click', () => $('#dlg-settings').close());
     $('#cfg-test').addEventListener('click', async () => {
       const url = $('#cfg-url').value.trim(), token = $('#cfg-token').value.trim();
@@ -678,19 +774,22 @@
       msg.textContent = 'Menguji…';
       const keep = cfg;
       try {
-        cfg = { url: url, token: token };
+        cfg = { mode: 'script', url: url, token: token };
         await api('ping');
-        msg.textContent = '✔ Terhubung. Klik Simpan.';
+        msg.textContent = '✔ Terhubung. Klik "Pakai Apps Script".';
       } catch (e) { msg.textContent = '✖ ' + e.message + ' — pastikan akses Web App "Siapa saja" dan TOKEN sama.'; }
       finally { cfg = keep; }
     });
-    $('#settings-form').addEventListener('submit', (e) => {
-      e.preventDefault();
+    $('#cfg-use-script').addEventListener('click', () => {
+      const url = $('#cfg-url').value.trim(), token = $('#cfg-token').value.trim();
+      if (!url || !token) { $('#cfg-msg').textContent = 'Isi URL dan TOKEN dulu.'; return; }
       const wasConnected = connected();
-      cfg = { url: $('#cfg-url').value.trim(), token: $('#cfg-token').value.trim(), limit: Number($('#cfg-limit').value) || 0 };
+      if (googleMode()) { if (GB()) GB().signOut(); store.set('et_cache', []); }
+      cfg = { mode: 'script', url: url, token: token, limit: cfg.limit || 0 };
       store.set('et_cfg', cfg);
       $('#dlg-settings').close();
-      if (!wasConnected && connected()) {
+      updateAccountUI();
+      if (!wasConnected) {
         // data lokal yang sudah ada dikirim ke Drive sekali
         const local = store.get('et_local', []).map(norm);
         if (local.length && confirm('Kirim ' + local.length + ' catatan lokal ke Google Sheets?')) {
@@ -699,6 +798,13 @@
         }
       }
       load();
+    });
+    $('#settings-form').addEventListener('submit', (e) => {
+      e.preventDefault();
+      cfg = Object.assign({}, cfg, { limit: Number($('#cfg-limit').value) || 0 });
+      store.set('et_cfg', cfg);
+      $('#dlg-settings').close();
+      render();
     });
 
     $('#e-type').addEventListener('change', () => fillEditCats($('#e-type').value, L.categorize($('#e-desc').value, $('#e-type').value)));
@@ -715,6 +821,7 @@
       try { await deleteItems([editing.id]); toast('Catatan dihapus'); } catch (err) { toast('Gagal menghapus: ' + err.message); }
     });
 
+    updateAccountUI();
     load();
   }
 

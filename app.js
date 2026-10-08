@@ -449,7 +449,12 @@
     node.className = (pct > 0) === upIsGood ? 'pos' : 'neg';
   }
 
-  function emptyText() {
+  function emptyText(inPeriod, type) {
+    if (type && inPeriod && inPeriod.length) {
+      const other = type === 'income' ? 'expense' : 'income';
+      const n = L.ofType(inPeriod, other).length;
+      if (n) return 'Belum ada ' + (type === 'income' ? 'pemasukan' : 'pengeluaran') + ' di periode ini. Tetapi ada ' + n + ' ' + (other === 'income' ? 'pemasukan' : 'pengeluaran') + ' — buka tab ' + (other === 'income' ? 'Pemasukan' : 'Pengeluaran') + ' atau Ringkasan.';
+    }
     if (data.length && mode !== 'all') return 'Tidak ada catatan di periode ini, tetapi ada ' + data.length + ' catatan di periode lain. Pilih "Semua" atau ketuk ‹ untuk melihatnya.';
     return 'Belum ada catatan di periode ini.';
   }
@@ -543,7 +548,7 @@
 
     const rows = inPeriod.slice().sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : b.id.localeCompare(a.id))).slice(0, 10);
     $('#sum-empty').hidden = rows.length > 0;
-    $('#sum-empty').textContent = emptyText();
+    $('#sum-empty').textContent = emptyText(inPeriod);
     renderRows($('#list-sum'), rows, Infinity, true);
   }
 
@@ -612,7 +617,8 @@
     let rows = items.filter((x) => (!fc || x.category === fc) && (!q || (x.desc + ' ' + x.category).toLowerCase().includes(q)));
     rows = rows.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : b.id.localeCompare(a.id)));
     $('#table-empty').hidden = rows.length > 0;
-    $('#table-empty').textContent = emptyText();
+    $('#table-empty').textContent = emptyText(inPeriod, type);
+    if (!items.length) $('#k-delta').textContent = emptyText(inPeriod, type);
     renderRows($('#list'), rows.slice(0, visible), isOut ? threshold : Infinity, false);
     $('#more').hidden = rows.length <= visible;
   }

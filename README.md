@@ -49,19 +49,13 @@ Login Google membutuhkan **OAuth Client ID** milik Anda. Nilainya bukan rahasia 
 
    Commit perubahan itu. GitHub Pages akan memperbaruinya dalam 1-2 menit.
 
-Selama `googleClientId` kosong, tombol "Masuk dengan Google" tidak muncul dan aplikasi memakai mode lanjutan.
+Selama `googleClientId` kosong, tombol "Masuk dengan Google" tidak muncul.
 
-## Mode lanjutan: Apps Script (opsional)
+## Pengguna lama (Apps Script)
 
-Untuk yang ingin memakai spreadsheet sendiri lewat Google Apps Script (cara awal aplikasi ini). Pengguna biasa tidak perlu ini.
-
-1. Buka editor Apps Script (spreadsheet → **Ekstensi → Apps Script**), tempel isi `apps-script/Code.gs`.
-2. Ganti `TOKEN` dengan kode rahasia buatan Anda (huruf dan angka acak, minimal 16 karakter).
-3. Jalankan fungsi **setup** sekali, lalu **Deploy → New deployment → Web app** (Execute as **Me**, Who has access **Anyone**). Salin URL `/exec`.
-4. Di aplikasi: ⚙ → **Mode lanjutan** → isi URL dan TOKEN → **Pakai Apps Script**.
-
-> Memperbarui `Code.gs` yang sudah pernah di-deploy: tempel kode baru, atur ulang `TOKEN`, jalankan `setup`,
-> lalu **Deploy → Manage deployments → ikon pensil → Version: New version → Deploy**. URL tidak berubah.
+Versi awal aplikasi ini memakai Google Apps Script. Bila Anda masih memakainya, aplikasi tetap membaca data lama.
+Untuk pindah, buka ⚙ → **Masuk dengan Google**; aplikasi menawarkan menyalin catatan yang sedang tampil ke Drive Anda.
+Berkas `apps-script/Code.gs` hanya disimpan sebagai arsip dan tidak dibutuhkan pengguna baru.
 
 ## Catatan
 
@@ -69,4 +63,3 @@ Untuk yang ingin memakai spreadsheet sendiri lewat Google Apps Script (cara awal
 - Tanpa login, aplikasi berjalan dalam mode lokal (data di browser) dan bisa disalin ke Drive saat Anda masuk.
 - Sesi Google berlaku sekitar 1 jam. Jika berakhir, aplikasi menampilkan tombol **Sambungkan lagi**; catatan tidak hilang.
 - Jangan mengubah nama tab `Pengeluaran` di spreadsheet; aplikasi mencarinya dengan nama itu.
-- Memindahkan data dari mode Apps Script ke akun Google: saat masuk dengan Google, aplikasi menawarkan menyalin catatan yang sedang tampil.

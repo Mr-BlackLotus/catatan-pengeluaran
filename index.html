@@ -39,7 +39,6 @@
     <span id="banner-text" class="banner-text"></span>
     <span class="banner-actions">
       <button id="banner-google" class="primary" type="button" hidden>Masuk dengan Google</button>
-      <button id="banner-setup" class="link-btn" type="button">Hubungkan ke Drive</button>
     </span>
   </div>
 
@@ -197,22 +196,6 @@
     <label>Batas "pengeluaran besar" (Rp)
       <input id="cfg-limit" type="number" min="0" step="1000" placeholder="Kosongkan = otomatis dari riwayat">
     </label>
-
-    <details id="adv" class="adv">
-      <summary>Mode lanjutan: Apps Script <span id="adv-state" class="muted"></span></summary>
-      <p class="muted">Untuk yang sudah punya Web App Apps Script sendiri. Pengguna biasa tidak perlu mengisi ini.</p>
-      <label>URL Web App Google Apps Script
-        <input id="cfg-url" type="url" inputmode="url" placeholder="https://script.google.com/macros/s/…/exec">
-      </label>
-      <label>Kode rahasia (TOKEN)
-        <input id="cfg-token" type="password" autocomplete="off" placeholder="sama dengan TOKEN di Code.gs">
-      </label>
-      <p id="cfg-msg" class="muted"></p>
-      <div class="row-end">
-        <button type="button" id="cfg-test" class="ghost">Tes koneksi</button>
-        <button type="button" id="cfg-use-script" class="ghost">Pakai Apps Script</button>
-      </div>
-    </details>
 
     <div class="row-end">
       <button type="button" id="cfg-close" class="ghost">Tutup</button>

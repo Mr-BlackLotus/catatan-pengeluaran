@@ -137,9 +137,14 @@
   const fCategory = (tipe) => '=IFERROR(QUERY(' + SRC + ',"select C, sum(E) where E is not null and J = \'' + tipe + '\' group by C order by sum(E) desc label C \'Kategori\', sum(E) \'Total (Rp)\'",1),"Belum ada data")';
   const fMonth = '=IFERROR(QUERY(' + SRC + ',"select year(B), month(B)+1, J, sum(E) where E is not null and J is not null group by year(B), month(B)+1, J order by year(B), month(B)+1, J label year(B) \'Tahun\', month(B)+1 \'Bulan\', J \'Tipe\', sum(E) \'Total (Rp)\'",1),"Belum ada data")';
 
-  async function readMeta(id) {
+  async function readMeta(id, repair) {
     const m = await gfetch(SHEETS + '/' + id + '?fields=sheets.properties(sheetId,title)');
     const tab = (m.sheets || []).map((s) => s.properties).find((p) => p.title === TAB);
+    if (!tab && repair) {
+      // file dibuat aplikasi tetapi penyiapannya belum selesai (mis. terputus di tengah jalan): lengkapi
+      await setupTabs(id);
+      return readMeta(id, false);
+    }
     if (!tab) {
       const e = new Error('Tab "' + TAB + '" tidak ditemukan di spreadsheet Catatan Keuangan Anda. Jangan ubah nama tab itu.');
       e.status = 'NOTAB';
@@ -156,14 +161,20 @@
 
   async function setupTabs(id) {
     const meta = await gfetch(SHEETS + '/' + id + '?fields=sheets.properties(sheetId,title)');
-    const sid = meta.sheets[0].properties.sheetId;
+    const props = (meta.sheets || []).map((x) => x.properties);
+    const hasSummary = props.some((p) => p.title === SUMMARY);
+    let first = props.find((p) => p.title !== SUMMARY);
+    if (!first) {
+      const added = await gfetch(SHEETS + '/' + id + ':batchUpdate', send('POST', { requests: [{ addSheet: { properties: { title: TAB } } }] }));
+      first = { sheetId: added.replies[0].addSheet.properties.sheetId };
+    }
+    const sid = first.sheetId;
     const col = (c) => ({ sheetId: sid, startRowIndex: 1, startColumnIndex: c, endColumnIndex: c + 1 });
     const fmt = (c, type, pattern) => ({ repeatCell: { range: col(c), cell: { userEnteredFormat: { numberFormat: { type: type, pattern: pattern } } }, fields: 'userEnteredFormat.numberFormat' } });
     let tz = '';
     try { tz = Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch (e) { /* abaikan */ }
     const requests = [
       { updateSheetProperties: { properties: { sheetId: sid, title: TAB, gridProperties: { frozenRowCount: 1 } }, fields: 'title,gridProperties.frozenRowCount' } },
-      { addSheet: { properties: { title: SUMMARY } } },
       { repeatCell: {
         range: { sheetId: sid, startRowIndex: 0, endRowIndex: 1, startColumnIndex: 0, endColumnIndex: HEADERS.length },
         cell: { userEnteredFormat: { backgroundColor: { red: 0.12, green: 0.16, blue: 0.22 }, textFormat: { bold: true, foregroundColor: { red: 1, green: 1, blue: 1 } } } },
@@ -174,19 +185,21 @@
       fmt(7, 'DATE_TIME', 'yyyy-mm-dd hh:mm:ss'),
       { updateDimensionProperties: { range: { sheetId: sid, dimension: 'COLUMNS', startIndex: 3, endIndex: 4 }, properties: { pixelSize: 280 }, fields: 'pixelSize' } },
     ];
+    if (!hasSummary) requests.splice(1, 0, { addSheet: { properties: { title: SUMMARY } } });
     if (tz) requests.push({ updateSpreadsheetProperties: { properties: { timeZone: tz }, fields: 'timeZone' } });
     await gfetch(SHEETS + '/' + id + ':batchUpdate', send('POST', { requests: requests }));
     await gfetch(SHEETS + '/' + id + '/values:batchUpdate', send('POST', {
       valueInputOption: 'USER_ENTERED',
       data: [
         { range: TAB + '!A1:J1', values: [HEADERS] },
+      ].concat(hasSummary ? [] : [
         { range: SUMMARY + '!A1', values: [['Pengeluaran per Kategori']] },
         { range: SUMMARY + '!A2', values: [[fCategory('Pengeluaran')]] },
         { range: SUMMARY + '!D1', values: [['Pemasukan per Kategori']] },
         { range: SUMMARY + '!D2', values: [[fCategory('Pemasukan')]] },
         { range: SUMMARY + '!G1', values: [['Total per Bulan']] },
         { range: SUMMARY + '!G2', values: [[fMonth]] },
-      ],
+      ]),
     }));
   }
 
@@ -205,13 +218,13 @@
     if (cached && cached.id) {
       try {
         const d = await gfetch(DRIVE + '/' + cached.id + '?fields=id,trashed');
-        if (!d.trashed) return await readMeta(cached.id);
+        if (!d.trashed) return await readMeta(cached.id, true);
       } catch (e) {
         if (e.status !== 404 && e.status !== 403) throw e; // file hilang / bukan milik akun ini: cari ulang
       }
     }
     const found = await findFile();
-    return found ? readMeta(found) : createSheet();
+    return found ? readMeta(found, true) : createSheet();
   }
 
   function ensureSheet() {

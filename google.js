@@ -169,23 +169,12 @@
       first = { sheetId: added.replies[0].addSheet.properties.sheetId };
     }
     const sid = first.sheetId;
-    const col = (c) => ({ sheetId: sid, startRowIndex: 1, startColumnIndex: c, endColumnIndex: c + 1 });
-    const fmt = (c, type, pattern) => ({ repeatCell: { range: col(c), cell: { userEnteredFormat: { numberFormat: { type: type, pattern: pattern } } }, fields: 'userEnteredFormat.numberFormat' } });
-    let tz = '';
-    try { tz = Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch (e) { /* abaikan */ }
     const requests = [
       { updateSheetProperties: { properties: { sheetId: sid, title: TAB, gridProperties: { frozenRowCount: 1 } }, fields: 'title,gridProperties.frozenRowCount' } },
-      { repeatCell: {
-        range: { sheetId: sid, startRowIndex: 0, endRowIndex: 1, startColumnIndex: 0, endColumnIndex: HEADERS.length },
-        cell: { userEnteredFormat: { backgroundColor: { red: 0.12, green: 0.16, blue: 0.22 }, textFormat: { bold: true, foregroundColor: { red: 1, green: 1, blue: 1 } } } },
-        fields: 'userEnteredFormat(backgroundColor,textFormat)',
-      } },
-      fmt(1, 'DATE', 'yyyy-mm-dd'),
-      fmt(4, 'NUMBER', '#,##0'),
-      fmt(7, 'DATE_TIME', 'yyyy-mm-dd hh:mm:ss'),
-      { updateDimensionProperties: { range: { sheetId: sid, dimension: 'COLUMNS', startIndex: 3, endIndex: 4 }, properties: { pixelSize: 280 }, fields: 'pixelSize' } },
     ];
-    if (!hasSummary) requests.splice(1, 0, { addSheet: { properties: { title: SUMMARY } } });
+    if (!hasSummary) requests.push({ addSheet: { properties: { title: SUMMARY } } });
+    let tz = '';
+    try { tz = Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch (e) { /* abaikan */ }
     if (tz) requests.push({ updateSpreadsheetProperties: { properties: { timeZone: tz }, fields: 'timeZone' } });
     await gfetch(SHEETS + '/' + id + ':batchUpdate', send('POST', { requests: requests }));
     await gfetch(SHEETS + '/' + id + '/values:batchUpdate', send('POST', {
@@ -201,6 +190,101 @@
         { range: SUMMARY + '!G2', values: [[fMonth]] },
       ]),
     }));
+    await applyLook(id);
+  }
+
+
+  // ---------- tampilan spreadsheet (rapi & profesional) ----------
+  const rgb = (hex) => ({ red: parseInt(hex.slice(1, 3), 16) / 255, green: parseInt(hex.slice(3, 5), 16) / 255, blue: parseInt(hex.slice(5, 7), 16) / 255 });
+  const NAVY = '#1e293b', INK = '#0f172a', MUTED = '#94a3b8';
+  const COL_WIDTH = [110, 100, 160, 300, 125, 95, 80, 145, 120, 110];
+  // pola per kolom: [tipe angka, pola, rata]
+  const COL_FMT = [
+    [null, null, 'LEFT'], ['DATE', 'dd/mm/yyyy', 'CENTER'], [null, null, 'LEFT'], [null, null, 'LEFT'],
+    ['NUMBER', '"Rp "#,##0', 'RIGHT'], [null, null, 'CENTER'], [null, null, 'CENTER'],
+    ['DATE_TIME', 'dd/mm/yyyy hh:mm', 'CENTER'], [null, null, 'LEFT'], [null, null, 'CENTER'],
+  ];
+
+  // format isi tabel pada baris [r0, r1) (r1 kosong = sampai bawah)
+  function bodyRequests(sid, r0, r1) {
+    const rng = (c0, c1) => { const g = { sheetId: sid, startRowIndex: r0, startColumnIndex: c0, endColumnIndex: c1 }; if (r1 !== undefined) g.endRowIndex = r1; return g; };
+    const reqs = [{
+      repeatCell: {
+        range: rng(0, HEADERS.length),
+        // backgroundColor dikosongkan: membersihkan warna header yang terbawa baris baru, sehingga warna selang-seling tampil
+        cell: { userEnteredFormat: { textFormat: { foregroundColor: rgb(INK), bold: false, fontSize: 10 }, verticalAlignment: 'MIDDLE', wrapStrategy: 'CLIP' } },
+        fields: 'userEnteredFormat(backgroundColor,textFormat,verticalAlignment,wrapStrategy)',
+      },
+    }];
+    COL_FMT.forEach((f, i) => {
+      const fmt = { horizontalAlignment: f[2] };
+      let fields = 'userEnteredFormat(horizontalAlignment' + (f[0] ? ',numberFormat' : '');
+      if (f[0]) fmt.numberFormat = { type: f[0], pattern: f[1] };
+      if (i === 0) { fmt.textFormat = { foregroundColor: rgb(MUTED), fontSize: 8, bold: false }; fields += ',textFormat'; }
+      if (i === 9) { fmt.textFormat = { foregroundColor: rgb(INK), fontSize: 10, bold: true }; fields += ',textFormat'; }
+      reqs.push({ repeatCell: { range: rng(i, i + 1), cell: { userEnteredFormat: fmt }, fields: fields + ')' } });
+    });
+    return reqs;
+  }
+
+  const lookDone = {};
+  async function applyLook(id, force) {
+    if (lookDone[id] && !force) return;
+    lookDone[id] = true;
+    const quiet = async (requests) => {
+      if (!requests.length) return;
+      try { await gfetch(SHEETS + '/' + id + ':batchUpdate', send('POST', { requests: requests })); } catch (e) { /* tampilan tidak boleh menghalangi pencatatan */ }
+    };
+    let meta;
+    try { meta = await gfetch(SHEETS + '/' + id + '?fields=sheets(properties(sheetId,title),bandedRanges(bandedRangeId),conditionalFormats)'); } catch (e) { return; }
+    const sheets = meta.sheets || [];
+    const main = sheets.find((x) => x.properties.title === TAB);
+    const sum = sheets.find((x) => x.properties.title === SUMMARY);
+    if (!main) return;
+    const sid = main.properties.sheetId;
+    const head = { sheetId: sid, startRowIndex: 0, endRowIndex: 1, startColumnIndex: 0, endColumnIndex: HEADERS.length };
+
+    // 1) judul kolom, lebar kolom, format isi tabel
+    const core = [
+      { repeatCell: { range: head, cell: { userEnteredFormat: { backgroundColor: rgb(NAVY), textFormat: { foregroundColor: rgb('#ffffff'), bold: true, fontSize: 10 }, horizontalAlignment: 'CENTER', verticalAlignment: 'MIDDLE', wrapStrategy: 'CLIP' } }, fields: 'userEnteredFormat(backgroundColor,textFormat,horizontalAlignment,verticalAlignment,wrapStrategy)' } },
+      { updateDimensionProperties: { range: { sheetId: sid, dimension: 'ROWS', startIndex: 0, endIndex: 1 }, properties: { pixelSize: 36 }, fields: 'pixelSize' } },
+    ];
+    COL_WIDTH.forEach((w, i) => core.push({ updateDimensionProperties: { range: { sheetId: sid, dimension: 'COLUMNS', startIndex: i, endIndex: i + 1 }, properties: { pixelSize: w }, fields: 'pixelSize' } }));
+    await quiet(core.concat(bodyRequests(sid, 1)));
+
+    // 2) warna baris selang-seling
+    if (!(main.bandedRanges || []).length) {
+      await quiet([{ addBanding: { bandedRange: { range: { sheetId: sid, startRowIndex: 1, startColumnIndex: 0, endColumnIndex: HEADERS.length }, rowProperties: { firstBandColor: rgb('#ffffff'), secondBandColor: rgb('#f1f5f9') } } } }]);
+    }
+    // 3) warna otomatis kolom Tipe
+    if (!(main.conditionalFormats || []).length) {
+      const jr = [{ sheetId: sid, startRowIndex: 1, startColumnIndex: 9, endColumnIndex: 10 }];
+      const rule = (text, bg, fg) => ({ addConditionalFormatRule: { index: 0, rule: { ranges: jr, booleanRule: { condition: { type: 'TEXT_EQ', values: [{ userEnteredValue: text }] }, format: { backgroundColor: rgb(bg), textFormat: { foregroundColor: rgb(fg), bold: true } } } } } });
+      await quiet([rule('Pemasukan', '#d1fae5', '#047857'), rule('Pengeluaran', '#fee2e2', '#b91c1c')]);
+    }
+    // 4) filter pada judul kolom
+    await quiet([{ setBasicFilter: { filter: { range: { sheetId: sid, startRowIndex: 0, startColumnIndex: 0, endColumnIndex: HEADERS.length } } } }]);
+
+    // 5) tab Ringkasan
+    if (sum) {
+      const ssid = sum.properties.sheetId;
+      const hd = (c0, c1) => ({ repeatCell: { range: { sheetId: ssid, startRowIndex: 1, endRowIndex: 2, startColumnIndex: c0, endColumnIndex: c1 }, cell: { userEnteredFormat: { backgroundColor: rgb(NAVY), textFormat: { foregroundColor: rgb('#ffffff'), bold: true }, horizontalAlignment: 'CENTER' } }, fields: 'userEnteredFormat(backgroundColor,textFormat,horizontalAlignment)' } });
+      const title = (c) => ({ repeatCell: { range: { sheetId: ssid, startRowIndex: 0, endRowIndex: 1, startColumnIndex: c, endColumnIndex: c + 1 }, cell: { userEnteredFormat: { textFormat: { bold: true, fontSize: 12, foregroundColor: rgb(INK) } } }, fields: 'userEnteredFormat.textFormat' } });
+      const money = (c) => ({ repeatCell: { range: { sheetId: ssid, startRowIndex: 2, startColumnIndex: c, endColumnIndex: c + 1 }, cell: { userEnteredFormat: { numberFormat: { type: 'NUMBER', pattern: '"Rp "#,##0' }, horizontalAlignment: 'RIGHT' } }, fields: 'userEnteredFormat(numberFormat,horizontalAlignment)' } });
+      const width = (c, w) => ({ updateDimensionProperties: { range: { sheetId: ssid, dimension: 'COLUMNS', startIndex: c, endIndex: c + 1 }, properties: { pixelSize: w }, fields: 'pixelSize' } });
+      const plain = (c) => ({ repeatCell: { range: { sheetId: ssid, startRowIndex: 2, startColumnIndex: c, endColumnIndex: c + 1 }, cell: { userEnteredFormat: { numberFormat: { type: 'NUMBER', pattern: '0' }, horizontalAlignment: 'CENTER' } }, fields: 'userEnteredFormat(numberFormat,horizontalAlignment)' } });
+      await quiet([title(0), title(3), title(6), hd(0, 2), hd(3, 5), hd(6, 10), money(1), money(4), money(9), plain(6), plain(7),
+        width(0, 190), width(1, 130), width(2, 30), width(3, 190), width(4, 130), width(5, 30), width(6, 70), width(7, 70), width(8, 110), width(9, 130),
+        { updateSheetProperties: { properties: { sheetId: ssid, gridProperties: { hideGridlines: true } }, fields: 'gridProperties.hideGridlines' } }]);
+    }
+  }
+
+  // baris yang baru ditambahkan mewarisi format dari baris di atasnya (baris pertama: dari judul kolom): rapikan
+  async function tidyAppended(updatedRange) {
+    const m = /!([A-Z]+)(\d+)(?::([A-Z]+)(\d+))?$/.exec(String(updatedRange || ''));
+    if (!m || !ss) return;
+    const r0 = Number(m[2]) - 1, r1 = Number(m[4] || m[2]);
+    try { await gfetch(SHEETS + '/' + ss.id + ':batchUpdate', send('POST', { requests: bodyRequests(ss.sheetId, r0, r1) })); } catch (e) { /* abaikan */ }
   }
 
   async function createSheet() {
@@ -220,14 +304,14 @@
     if (cached && cached.id) {
       try {
         const d = await gfetch(DRIVE + '/' + cached.id + '?fields=id,trashed');
-        if (!d.trashed) return await readMeta(cached.id, true);
+        if (!d.trashed) { const m = await readMeta(cached.id, true); applyLook(cached.id); return m; }
       } catch (e) {
         if (!gone(e)) throw e; // file hilang / bukan milik akun ini: cari ulang
       }
     }
     const found = await findFile();
     if (found) {
-      try { return await readMeta(found, true); } catch (e) { if (!gone(e)) throw e; }
+      try { const m = await readMeta(found, true); applyLook(found); return m; } catch (e) { if (!gone(e)) throw e; }
     }
     return createSheet(); // tidak ada file yang bisa dipakai: buat baru otomatis
   }
@@ -328,7 +412,8 @@
     const stamp = nowSerial();
     const rows = [];
     for (const it of fresh) rows.push(rowFor(it, await uploadReceipt(it), stamp));
-    await gfetch(valuesUrl(TAB + '!A1', '') + ':append?valueInputOption=RAW&insertDataOption=INSERT_ROWS', send('POST', { values: rows }));
+    const res = await gfetch(valuesUrl(TAB + '!A1', '') + ':append?valueInputOption=RAW&insertDataOption=INSERT_ROWS', send('POST', { values: rows }));
+    await tidyAppended(res && res.updates && res.updates.updatedRange);
     return rows.length;
   }
 

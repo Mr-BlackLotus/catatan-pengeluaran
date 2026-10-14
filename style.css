@@ -195,6 +195,15 @@ input::placeholder, textarea::placeholder { color: color-mix(in srgb, var(--mute
 .cat-list .pct { color: var(--muted); width: 42px; text-align: right; font-variant-numeric: tabular-nums; }
 .cat-list .val { font-variant-numeric: tabular-nums; }
 
+.method-list { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 12px; }
+.method-list li { display: grid; gap: 5px; font-size: 13px; }
+.method-list .m-top { display: flex; align-items: center; gap: 8px; }
+.method-list .m-name { flex: 1; font-weight: 600; }
+.method-list .m-val { font-variant-numeric: tabular-nums; color: var(--muted); }
+.method-list .m-pct { font-variant-numeric: tabular-nums; font-weight: 700; min-width: 42px; text-align: right; }
+.method-list .m-bar { height: 8px; border-radius: 99px; background: var(--soft); overflow: hidden; }
+.method-list .m-bar > i { display: block; height: 100%; border-radius: 99px; }
+
 .alerts { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
 .alerts li { padding: 10px 12px; border-radius: 12px; font-size: 14px; border-left: 4px solid transparent; }
 .alerts .warn { background: var(--warn-bg); color: var(--warn); border-left-color: var(--warn); }

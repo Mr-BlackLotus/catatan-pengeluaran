@@ -611,6 +611,20 @@
         options: { responsive: true, maintainAspectRatio: false, cutout: '62%', plugins: { legend: { display: false }, tooltip: { callbacks: { label: (c) => c.label + ': ' + L.rupiah(c.parsed) } } } },
       });
     }
+    const ml = $('#method-list');
+    ml.textContent = '';
+    L.byMethod(items).forEach((m) => {
+      ml.appendChild(el('li', {}, [
+        el('div', { class: 'm-top' }, [
+          el('span', { class: 'dot', style: 'width:10px;height:10px;border-radius:3px;background:' + m.color }),
+          el('span', { class: 'm-name', text: m.method }),
+          el('span', { class: 'm-val', text: L.rupiah(m.total) + ' · ' + m.count + 'x' }),
+          el('span', { class: 'm-pct', text: L.fmtPct(m.pct) }),
+        ]),
+        el('div', { class: 'm-bar' }, [el('i', { style: 'width:' + Math.max(m.pct, 1.5).toFixed(1) + '%;background:' + m.color })]),
+      ]));
+    });
+    $('#method-card').hidden = !items.length;
     cats.forEach((c) => {
       catList.appendChild(el('li', {}, [
         el('span', { class: 'dot', style: 'background:' + L.catColor(type, c.category) }),

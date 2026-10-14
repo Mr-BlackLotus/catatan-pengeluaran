@@ -332,6 +332,15 @@
     return Object.keys(map).map((k) => ({ category: k, total: map[k] })).sort((a, b) => b.total - a.total);
   }
 
+  const METHOD_COLORS = { 'Tunai': '#22c55e', 'Transfer': '#3b82f6', 'E-wallet': '#a855f7', 'Kartu': '#f59e0b', 'Tidak diisi': '#94a3b8' };
+  function byMethod(items) {
+    const map = {}, cnt = {};
+    items.forEach((x) => { const k = x.method || 'Tidak diisi'; map[k] = (map[k] || 0) + x.amount; cnt[k] = (cnt[k] || 0) + 1; });
+    const total = items.reduce((t, x) => t + x.amount, 0);
+    return Object.keys(map).map((k) => ({ method: k, total: map[k], count: cnt[k], pct: total ? (map[k] / total) * 100 : 0, color: METHOD_COLORS[k] || '#64748b' })).sort((a, b) => b.total - a.total);
+  }
+  const fmtPct = (p) => (p > 0 && p < 1 ? '<1' : p < 10 && p % 1 ? p.toFixed(1).replace('.', ',') : String(Math.round(p))) + '%';
+
   /** Bucket untuk grafik batang: harian (minggu/bulan) atau bulanan (tahun/semua) */
   function buckets(items, mode, range) {
     const out = [];
@@ -400,7 +409,7 @@
     ['Donasi & Sosial', ['donasi', 'sosial']],
     ['Investasi', ['investasi']],
   ];
-  const STOP = new Set(('berapa brp banyak total jumlah pengeluaran pengeluarannya pemasukan pemasukannya pendapatan saya aku ku untuk buat dalam selama pada di ke dari dan yang apa saja aja kah ya nih dong tolong coba lihat tampilkan daftar rekap rincian rata rata paling terbesar tertinggi terkecil termahal kali kategori transaksi catatan uang duit habis keluar masuk dikeluarkan sebulan setahun seminggu sehari bulan minggu tahun hari ini itu kemarin lalu terakhir lagi sih adalah ada tiap per sejak semua seluruh keseluruhan gaji saldo sisa selisih tabung punya aku untuk buat mana kapan').split(' '));
+  const STOP = new Set(('berapa brp banyak total jumlah pengeluaran pengeluarannya pemasukan pemasukannya pendapatan saya aku ku untuk buat dalam selama pada di ke dari dan yang apa saja aja kah ya nih dong tolong coba lihat tampilkan daftar rekap rincian rata rata paling terbesar tertinggi terkecil termahal kali kategori persentase presentase porsi metode pembayaran pakai memakai menggunakan via lewat bayar cara wallet transaksi catatan uang duit habis keluar masuk dikeluarkan sebulan setahun seminggu sehari bulan minggu tahun hari ini itu kemarin lalu terakhir lagi sih adalah ada tiap per sejak semua seluruh keseluruhan gaji saldo sisa selisih tabung punya aku untuk buat mana kapan').split(' '));
 
   const isQuestion = (text) => {
     const t = String(text || '').toLowerCase();
@@ -460,6 +469,7 @@
     if (/\b(rata-rata|rata2|rata rata)\b/.test(t)) act = 'avg';
     else if (/\b(terbesar|termahal|tertinggi|paling (mahal|besar|banyak habis))\b/.test(t) && !/\bkategori\b/.test(t)) act = 'top';
     else if (/\b(berapa kali|jumlah transaksi|berapa transaksi|berapa catatan)\b/.test(t)) act = 'count';
+    else if (/\b(metode|pembayaran|cara bayar)\b/.test(t)) act = 'methods';
     else if (/\b(per kategori|rincian|rekap|breakdown|kategori)\b/.test(t) || /\bpaling (banyak|boros)\b/.test(t) || /\bterboros\b/.test(t)) act = 'cats';
     else if (/\b(daftar|apa saja|apa aja|list|tampilkan|lihat)\b/.test(t)) act = 'list';
 
@@ -474,15 +484,21 @@
     } else {
       for (const c of INCOME_CATEGORIES) { if (c.name !== 'Lainnya' && t.includes(c.name.toLowerCase())) { category = c.name; t = t.replace(c.name.toLowerCase(), ' '); break; } }
     }
+    // metode pembayaran tertentu (mis. "pakai e-wallet")
+    let method = null;
+    if (act !== 'methods') {
+      const MW = [['E-wallet', /\b(e-wallet|ewallet|e wallet|gopay|ovo|dana|shopeepay|linkaja|qris)\b/], ['Tunai', /\b(tunai|cash)\b/], ['Transfer', /\b(transfer)\b/], ['Kartu', /\b(kartu|debit|kredit)\b/]];
+      for (const [name, re] of MW) { const mm = re.exec(t); if (mm) { method = name; t = t.replace(mm[0], ' '); break; } }
+    }
     const tokens = t.replace(/[^a-z0-9& ]/g, ' ').split(' ').filter((w) => w.length >= 3 && !STOP.has(w) && !/^\d+$/.test(w));
     const groups = tokens.map((w) => CONCEPTS[w] || [w]);
 
     const inPeriod = data.filter((x) => x.date >= per.start && x.date <= per.end);
     const matchTok = (x, words) => { const h = (x.desc + ' ' + x.category + ' ' + (x.method || '')).toLowerCase(); return words.some((w) => h.includes(w)); };
     const base = inPeriod.filter((x) => (x.type === 'income' ? 'income' : 'expense') === type);
-    const rows = base.filter((x) => (!category || x.category === category) && groups.every((g) => matchTok(x, g)));
+    const rows = base.filter((x) => (!method || x.method === method) && (!category || x.category === category) && groups.every((g) => matchTok(x, g)));
 
-    const subject = [typeWord, category ? 'kategori ' + category : '', tokens.join(' ')].filter(Boolean).join(' ');
+    const subject = [typeWord, category ? 'kategori ' + category : '', method ? 'via ' + method : '', tokens.join(' ')].filter(Boolean).join(' ');
     const when = per.label + (per.label.indexOf('(') < 0 && per.start !== per.end && per.start > '0001' ? ' (' + fmtDay(per.start) + ' – ' + fmtDay(per.end) + ')' : '');
     const lines = [];
     const sorted = rows.slice().sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
@@ -512,6 +528,9 @@
       lines.push(...listRows(top, 5));
     } else if (act === 'count') {
       lines.push('Ada ' + rows.length + ' transaksi ' + subject + ' pada ' + when + ', total ' + rupiah(total) + '.');
+    } else if (act === 'methods') {
+      lines.push('Metode pembayaran ' + subject + ' ' + when + ' (total ' + rupiah(total) + '):');
+      byMethod(rows).forEach((m) => lines.push('• ' + m.method + ': ' + rupiah(m.total) + ' (' + fmtPct(m.pct) + ', ' + m.count + ' transaksi)'));
     } else if (act === 'cats') {
       const cats = byCategory(rows);
       lines.push('Rincian ' + subject + ' ' + when + ' (total ' + rupiah(total) + '):');
@@ -532,7 +551,7 @@
   return {
     CATEGORIES, EXPENSE_CATEGORIES, INCOME_CATEGORIES, catsFor, catColor,
     categorize, detectType, detectMethod, parseEntry, parseMessage, parseReceipt, extractDate, extractAmount,
-    periodRange, shiftAnchor, previousRange, inRange, ofType, sum, byCategory, buckets, bigThreshold,
+    periodRange, shiftAnchor, previousRange, inRange, ofType, sum, byCategory, byMethod, fmtPct, buckets, bigThreshold,
     rupiah, periodLabel, ymd, parseYmd, addDays, isQuestion, answer,
   };
 });

@@ -381,10 +381,158 @@
     return f(range.start) + ' – ' + f(range.end);
   }
 
+
+  // ---------- tanya jawab (mesin pertanyaan lokal, tanpa server) ----------
+  const CONCEPTS = {
+    jajan: ['jajan', 'snack', 'camilan', 'cemilan', 'cemil', 'gorengan', 'boba', 'kopi', 'kue', 'roti', 'bolen', 'martabak', 'seblak', 'cilok', 'batagor', 'siomay', 'pentol', 'donat', 'cokelat', 'coklat', 'permen', 'es krim', 'ice cream', 'es teh', 'jus', 'minuman', 'dessert', 'cireng', 'risol', 'bakwan', 'pisang goreng', 'kebab', 'takoyaki'],
+    makanan: ['makan', 'nasi', 'ayam', 'bakso', 'mie', 'soto', 'warteg', 'sarapan', 'lunch', 'dinner', 'gofood', 'grabfood', 'shopeefood', 'resto', 'warung', 'kantin', 'catering'],
+    ngopi: ['kopi', 'cafe', 'kafe', 'starbucks', 'latte'],
+  };
+  const CAT_ALIAS = [
+    ['Makan & Minum', ['makan & minum', 'makan dan minum', 'makan minum', 'makanan', 'konsumsi']],
+    ['Transportasi', ['transportasi', 'transport', 'ongkos']],
+    ['Kebutuhan Harian', ['kebutuhan harian', 'kebutuhan']],
+    ['Hiburan', ['hiburan']],
+    ['Tagihan & Utilitas', ['tagihan', 'utilitas']],
+    ['Kesehatan', ['kesehatan']],
+    ['Pendidikan', ['pendidikan']],
+    ['Belanja', ['belanja']],
+    ['Donasi & Sosial', ['donasi', 'sosial']],
+    ['Investasi', ['investasi']],
+  ];
+  const STOP = new Set(('berapa brp banyak total jumlah pengeluaran pengeluarannya pemasukan pemasukannya pendapatan saya aku ku untuk buat dalam selama pada di ke dari dan yang apa saja aja kah ya nih dong tolong coba lihat tampilkan daftar rekap rincian rata rata paling terbesar tertinggi terkecil termahal kali kategori transaksi catatan uang duit habis keluar masuk dikeluarkan sebulan setahun seminggu sehari bulan minggu tahun hari ini itu kemarin lalu terakhir lagi sih adalah ada tiap per sejak semua seluruh keseluruhan gaji saldo sisa selisih tabung punya aku untuk buat mana kapan').split(' '));
+
+  const isQuestion = (text) => {
+    const t = String(text || '').toLowerCase();
+    if (/\?\s*$/.test(t) || /\b(berapa|brp|apa saja|apa aja|kapan|mana)\b/.test(t)) return true;
+    if (extractAmount(t).amount) return false;
+    return /\b(total|jumlah|rata-rata|rata2|rata rata|terbesar|terkecil|tertinggi|termahal|paling|rekap|rincian|daftar|tampilkan|lihat|saldo|sisa uang)\b/.test(t);
+  };
+
+  function resolvePeriod(t, now) {
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const R = (a, b, label, rm) => ({ start: ymd(a), end: ymd(b), label: label, rest: rm });
+    const monthName = (d) => MONTHS[d.getMonth()].replace(/^./, (c) => c.toUpperCase()) + ' ' + d.getFullYear();
+    let m;
+    if ((m = /\b(\d+)\s*(hari|minggu|bulan)\s*(terakhir|belakangan|lalu|kebelakang)\b/.exec(t))) {
+      const n = Number(m[1]); const u = m[2];
+      const start = u === 'hari' ? addDays(today, -(n - 1)) : u === 'minggu' ? addDays(today, -(n * 7 - 1)) : new Date(today.getFullYear(), today.getMonth() - n, today.getDate() + 1);
+      return R(start, today, n + ' ' + u + ' terakhir', m[0]);
+    }
+    if (/\bhari ini\b/.test(t)) return R(today, today, 'hari ini', 'hari ini');
+    if (/\bkemarin\b/.test(t)) { const y = addDays(today, -1); return R(y, y, 'kemarin', 'kemarin'); }
+    if (/\bminggu (lalu|kemarin)\b/.test(t)) { const s = addDays(startOfWeek(today), -7); return R(s, addDays(s, 6), 'minggu lalu', 'minggu lalu'); }
+    if (/\b(minggu ini|seminggu)\b/.test(t)) { const s = startOfWeek(today); return R(s, addDays(s, 6), 'minggu ini', 'minggu ini'); }
+    if (/\b(tahun lalu|tahun kemarin)\b/.test(t)) { const y = today.getFullYear() - 1; return R(new Date(y, 0, 1), new Date(y, 11, 31), 'tahun ' + y, 'tahun lalu'); }
+    if (/\b(tahun ini|setahun|1 tahun|satu tahun)\b/.test(t)) { const y = today.getFullYear(); return R(new Date(y, 0, 1), new Date(y, 11, 31), 'tahun ' + y, 'tahun ini'); }
+    if (/\bbulan (lalu|kemarin)\b/.test(t)) { const d = new Date(today.getFullYear(), today.getMonth() - 1, 1); return R(d, new Date(d.getFullYear(), d.getMonth() + 1, 0), monthName(d), 'bulan lalu'); }
+    if (/\b(bulan ini|sebulan|1 bulan|satu bulan)\b/.test(t)) { const d = new Date(today.getFullYear(), today.getMonth(), 1); return R(d, new Date(d.getFullYear(), d.getMonth() + 1, 0), monthName(d), 'bulan ini'); }
+    for (let i = 0; i < 12; i++) {
+      const re = new RegExp('\\b(?:bulan )?(' + MONTHS[i] + '|' + MONTH_ABBR[i] + ')(?: (\\d{4}))?\\b');
+      if ((m = re.exec(t))) {
+        let y = m[2] ? Number(m[2]) : today.getFullYear();
+        if (!m[2] && i > today.getMonth()) y -= 1; // bulan di depan = tahun lalu
+        const d = new Date(y, i, 1);
+        return R(d, new Date(y, i + 1, 0), monthName(d), m[0]);
+      }
+    }
+    if (/\b(semua|seluruh|keseluruhan|sejak awal|selama ini|sampai sekarang|all time)\b/.test(t)) return { start: '0000-01-01', end: '9999-12-31', label: 'semua waktu', rest: 'semua' };
+    const d = new Date(today.getFullYear(), today.getMonth(), 1);
+    return R(d, new Date(d.getFullYear(), d.getMonth() + 1, 0), monthName(d) + ' (bulan ini)', '', true);
+  }
+
+  const fmtDay = (s) => { const d = parseYmd(s); return pad(d.getDate()) + ' ' + MONTH_ABBR[d.getMonth()].replace(/^./, (c) => c.toUpperCase()) + ' ' + d.getFullYear(); };
+
+  function answer(text, data, now) {
+    now = now || new Date();
+    const raw = String(text || '');
+    let t = raw.toLowerCase().replace(/[?!,]/g, ' ').replace(/\s+/g, ' ').trim();
+    const per = resolvePeriod(t, now);
+    t = t.replace(per.rest || '@@', ' ');
+
+    // jenis
+    const wantNet = /\b(saldo|sisa uang|sisa duit|selisih|tabungan bersih|berapa tabung)\b/.test(t);
+    const type = /\b(pemasukan|pendapatan|income|gaji|penghasilan|uang masuk)\b/.test(t) ? 'income' : 'expense';
+    const typeWord = type === 'income' ? 'pemasukan' : 'pengeluaran';
+
+    // aksi
+    let act = 'total';
+    if (/\b(rata-rata|rata2|rata rata)\b/.test(t)) act = 'avg';
+    else if (/\b(terbesar|termahal|tertinggi|paling (mahal|besar|banyak habis))\b/.test(t) && !/\bkategori\b/.test(t)) act = 'top';
+    else if (/\b(berapa kali|jumlah transaksi|berapa transaksi|berapa catatan)\b/.test(t)) act = 'count';
+    else if (/\b(per kategori|rincian|rekap|breakdown|kategori)\b/.test(t) || /\bpaling (banyak|boros)\b/.test(t) || /\bterboros\b/.test(t)) act = 'cats';
+    else if (/\b(daftar|apa saja|apa aja|list|tampilkan|lihat)\b/.test(t)) act = 'list';
+
+    // filter kategori / kata kunci
+    const pool = type === 'income' ? INCOME_CATEGORIES : EXPENSE_CATEGORIES;
+    let category = null;
+    if (type === 'expense') {
+      for (const [name, aliases] of CAT_ALIAS) {
+        const hit = aliases.find((a) => t.includes(a));
+        if (hit) { category = name; t = t.replace(hit, ' '); break; }
+      }
+    } else {
+      for (const c of INCOME_CATEGORIES) { if (c.name !== 'Lainnya' && t.includes(c.name.toLowerCase())) { category = c.name; t = t.replace(c.name.toLowerCase(), ' '); break; } }
+    }
+    const tokens = t.replace(/[^a-z0-9& ]/g, ' ').split(' ').filter((w) => w.length >= 3 && !STOP.has(w) && !/^\d+$/.test(w));
+    const groups = tokens.map((w) => CONCEPTS[w] || [w]);
+
+    const inPeriod = data.filter((x) => x.date >= per.start && x.date <= per.end);
+    const matchTok = (x, words) => { const h = (x.desc + ' ' + x.category + ' ' + (x.method || '')).toLowerCase(); return words.some((w) => h.includes(w)); };
+    const base = inPeriod.filter((x) => (x.type === 'income' ? 'income' : 'expense') === type);
+    const rows = base.filter((x) => (!category || x.category === category) && groups.every((g) => matchTok(x, g)));
+
+    const subject = [typeWord, category ? 'kategori ' + category : '', tokens.join(' ')].filter(Boolean).join(' ');
+    const when = per.label + (per.label.indexOf('(') < 0 && per.start !== per.end && per.start > '0001' ? ' (' + fmtDay(per.start) + ' – ' + fmtDay(per.end) + ')' : '');
+    const lines = [];
+    const sorted = rows.slice().sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
+    const listRows = (arr, n) => arr.slice(0, n).map((x) => '• ' + fmtDay(x.date).slice(0, 6) + ' · ' + x.desc + ' · ' + rupiah(x.amount));
+    const note = tokens.length && tokens.some((w) => CONCEPTS[w]) ? 'Dihitung dari catatan yang deskripsinya mengandung kata seperti: ' + [].concat(...tokens.filter((w) => CONCEPTS[w]).map((w) => CONCEPTS[w])).slice(0, 12).join(', ') + ', dll.' : '';
+
+    if (wantNet) {
+      const inc = sum(inPeriod.filter((x) => x.type === 'income'));
+      const exp = sum(inPeriod.filter((x) => x.type !== 'income'));
+      return { text: ['Saldo ' + when + ': ' + rupiah(inc - exp) + '.', 'Pemasukan ' + rupiah(inc) + ', pengeluaran ' + rupiah(exp) + '.'].join('\n'), count: inPeriod.length };
+    }
+    if (!rows.length) {
+      const other = tokens.length || category ? 'Tidak ada ' + subject + ' pada ' + when + '.' : 'Belum ada ' + typeWord + ' pada ' + when + '.';
+      return { text: other + (data.length ? ' Coba periode lain, mis. "bulan lalu" atau "tahun ini".' : ' Belum ada catatan sama sekali. Masuk dengan Google dan catat dulu.'), count: 0 };
+    }
+    const total = sum(rows);
+    const days = per.start > '0001' ? Math.round((parseYmd(per.end) - parseYmd(per.start)) / 864e5) + 1 : 0;
+    if (act === 'avg') {
+      const spanDays = days && per.end >= ymd(now) && per.start <= ymd(now) ? Math.round((parseYmd(ymd(now)) - parseYmd(per.start)) / 864e5) + 1 : days;
+      lines.push('Rata-rata ' + subject + ' ' + when + ':');
+      lines.push('• per transaksi: ' + rupiah(total / rows.length));
+      if (spanDays) lines.push('• per hari: ' + rupiah(total / spanDays) + ' (' + spanDays + ' hari)');
+      lines.push('Total ' + rupiah(total) + ' dari ' + rows.length + ' transaksi.');
+    } else if (act === 'top') {
+      const top = rows.slice().sort((a, b) => b.amount - a.amount);
+      lines.push(subject.replace(/^./, (c) => c.toUpperCase()) + ' terbesar ' + when + ':');
+      lines.push(...listRows(top, 5));
+    } else if (act === 'count') {
+      lines.push('Ada ' + rows.length + ' transaksi ' + subject + ' pada ' + when + ', total ' + rupiah(total) + '.');
+    } else if (act === 'cats') {
+      const cats = byCategory(rows);
+      lines.push('Rincian ' + subject + ' ' + when + ' (total ' + rupiah(total) + '):');
+      cats.slice(0, 8).forEach((c) => lines.push('• ' + c.category + ': ' + rupiah(c.total) + ' (' + Math.round((c.total / total) * 100) + '%)'));
+    } else if (act === 'list') {
+      lines.push(subject.replace(/^./, (c) => c.toUpperCase()) + ' ' + when + ' — ' + rows.length + ' transaksi, total ' + rupiah(total) + ':');
+      lines.push(...listRows(sorted, 10));
+      if (rows.length > 10) lines.push('…dan ' + (rows.length - 10) + ' lainnya.');
+    } else {
+      lines.push('Total ' + subject + ' ' + when + ': ' + rupiah(total) + ' dari ' + rows.length + ' transaksi.');
+      lines.push(...listRows(sorted, 6));
+      if (rows.length > 6) lines.push('…dan ' + (rows.length - 6) + ' lainnya.');
+    }
+    if (note) lines.push(note);
+    return { text: lines.join('\n'), count: rows.length, total: total };
+  }
+
   return {
     CATEGORIES, EXPENSE_CATEGORIES, INCOME_CATEGORIES, catsFor, catColor,
     categorize, detectType, detectMethod, parseEntry, parseMessage, parseReceipt, extractDate, extractAmount,
     periodRange, shiftAnchor, previousRange, inRange, ofType, sum, byCategory, buckets, bigThreshold,
-    rupiah, periodLabel, ymd, parseYmd, addDays,
+    rupiah, periodLabel, ymd, parseYmd, addDays, isQuestion, answer,
   };
 });

@@ -16,6 +16,7 @@ Data tidak melewati server pihak lain; browser Anda langsung berbicara dengan Go
 
 - Tiga tab: **Ringkasan** (saldo, rasio tabung, pemasukan vs pengeluaran), **Pengeluaran**, **Pemasukan**
 - Catat lewat chat: `makan siang 25rb`, `bensin 50.000 kemarin`, `gaji 8jt`, `beli saham 500rb`
+- Tanya lewat chat yang sama: `berapa total jajan saya bulan ini?`, `pengeluaran terbesar minggu ini`, `rata-rata transportasi 30 hari terakhir`, `saldo bulan lalu`. Dijawab langsung di browser dari data Anda (tanpa server dan tanpa API berbayar)
 - Catat lewat foto struk (dibaca di browser, foto bukti ikut tersimpan di Drive pengguna)
 - Kategori otomatis. Pengeluaran: Makan & Minum, Transportasi, Kebutuhan Harian, Hiburan, Tagihan & Utilitas, Kesehatan, Pendidikan, Belanja, Donasi & Sosial, Investasi, Lainnya. Pemasukan: Gaji, Bonus & THR, Usaha & Freelance, Hasil Investasi, Hadiah & Transfer, Lainnya
 - Metode pembayaran terdeteksi otomatis (Tokopedia, Shopee, GoPay, OVO, Dana, QRIS → E-wallet)

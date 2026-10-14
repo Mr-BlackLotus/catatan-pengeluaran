@@ -249,6 +249,12 @@
       [document.createTextNode('Ketik pengeluaran seperti ngobrol, misalnya:'), el('br'), code('makan siang 25rb'), ' · ', code('bensin 50.000 kemarin'), ' · ', code('beli saham 500rb'), el('br'), document.createTextNode('Beberapa sekaligus? Pisahkan dengan baris baru atau titik koma. Atau kirim foto struk. Pemasukan? Ganti ke "+ Masuk" atau awali dengan "gaji", "bonus", dll.')]
         .forEach((n) => h.appendChild(typeof n === 'string' ? document.createTextNode(n) : n));
     }
+    h.appendChild(el('br'));
+    h.appendChild(document.createTextNode('Mau tanya? Ketik pertanyaan, mis. '));
+    h.appendChild(code('berapa total jajan saya bulan ini?'));
+    h.appendChild(document.createTextNode(' atau '));
+    h.appendChild(code('pengeluaran terbesar minggu ini'));
+    h.appendChild(document.createTextNode('.'));
   }
   function updateEntryUI() {
     document.querySelectorAll('.type-toggle button').forEach((b) => b.classList.toggle('on', b.dataset.type === entryType));
@@ -294,6 +300,11 @@
 
   async function handleText(text) {
     addMsg('user', text);
+    if (L.isQuestion(text)) {
+      const a = L.answer(text, data, new Date());
+      addMsg('bot', el('div', { class: 'answer', style: 'white-space:pre-line', text: a.text }));
+      return;
+    }
     const parsed = L.parseMessage(text, undefined, entryType === 'income' ? 'income' : undefined);
     const ok = parsed.filter((p) => p.entry && p.entry.amount > 0).map((p) => p.entry);
     const bad = parsed.filter((p) => !p.entry || !(p.entry.amount > 0)).map((p) => p.raw);
